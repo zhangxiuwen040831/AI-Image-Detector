@@ -1,0 +1,99 @@
+# AI 图像检测系统依赖项
+# 版本要求：Python 3.8+
+
+# ========================================
+# 核心依赖
+# ========================================
+
+# PyTorch 及其相关库
+torch>=2.0.0
+torchvision>=0.15.0
+
+# 模型和图像处理
+timm>=0.9.0                  # 模型库
+open_clip_torch>=2.24.0      # CLIP 模型
+pillow>=9.5.0                # 图像处理
+albumentations>=1.3.0         # 数据增强
+
+# 科学计算和评估
+numpy>=1.24.0
+tensorboard>=2.14.0           # 训练可视化
+scikit-learn>=1.3.0          # 评估指标
+matplotlib>=3.7.0             # 图表绘制
+seaborn>=0.13.0              # 数据可视化
+
+# 部署和 API
+fastapi>=0.110.0              # API 框架
+uvicorn[standard]>=0.27.0     # ASGI 服务器
+python-multipart>=0.0.6       # 文件上传支持
+sse-starlette>=1.6.5          # SSE 支持
+pycryptodome>=3.18.0          # 加密库支持
+
+# 数据序列化和配置
+pydantic>=2.0.0               # 数据验证
+pyyaml>=6.0.0                 # 配置文件
+
+# 数据库
+pymysql>=1.1.0                # MySQL 连接
+
+# 安全
+bcrypt>=4.0.0                 # 密码哈希
+python-jose[cryptography]>=3.3.0  # JWT 认证
+
+# 模型导出和推理
+onnxruntime>=1.16.0           # ONNX 推理
+
+# ========================================
+# 环境配置步骤
+# ========================================
+
+# 1. 创建虚拟环境
+# python -m venv .venv
+
+# 2. 激活虚拟环境
+# Windows:
+# .venv\Scripts\activate
+# Linux/Mac:
+# source .venv/bin/activate
+
+# 3. 安装依赖
+# pip install -r requirements.txt
+
+# 4. 安装 PyTorch（GPU 版本，CUDA 11.8）
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# 5. 安装 CLIP 模型依赖
+# pip install open_clip_torch
+
+# ========================================
+# 系统要求
+# ========================================
+
+# 本地开发环境：
+# - Python 3.8+
+# - Git Bash（Windows）或 WSL，或 Linux/Mac 系统
+# - SSH 客户端
+# - 基础工具：tar、sha256sum、stat 等
+
+# 远程服务器（训练环境）：
+# - Ubuntu 22.04 或类似 Linux 系统
+# - Python 3.8+
+# - NVIDIA GPU（推荐）
+# - CUDA 11.8+（用于 GPU 训练）
+# - 足够的磁盘空间（至少 50GB）
+
+# ========================================
+# 可选依赖
+# ========================================
+
+# 开发工具
+# black>=23.0.0               # 代码格式化
+# flake8>=6.0.0               # 代码检查
+# pre-commit>=3.0.0           # 代码提交钩子
+
+# 其他工具
+requests>=2.30.0            # HTTP 客户端
+tqdm>=4.65.0                # 进度条
+opencv-python>=4.8.0        # 计算机视觉
+datasets>=2.14.0            # 数据集加载
+huggingface_hub>=0.16.0     # HF 模型库工具

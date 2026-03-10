@@ -1,0 +1,42 @@
+
+experiment_name: phase1_optimization_rtx3090
+
+seed: 42
+
+device: cuda
+num_workers: 10 # 12 vCPU
+
+data:
+  train_root: data/cifake/train
+  val_root: data/cifake/test
+  image_size: 224
+  batch_size: 32 # 24GB VRAM allows larger batch size with AMP
+
+model:
+  backbone_name: ViT-H-14
+  backbone_pretrained: laion2b_s32b_b79k
+  train_backbone: false # Using LoRA instead of full finetuning
+  
+  # Phase 1: Metric Loss
+  use_metric: true
+  metric_lambda: 0.1
+  
+  use_lora: true 
+  lora_rank: 16 # Increased rank for better capacity
+  lora_alpha: 32.0
+  lora_dropout: 0.1
+  
+  use_osd: true 
+  osd_proj_dim: 128
+  osd_lambda_orth: 0.001
+
+train:
+  num_epochs: 10 # Increased epochs
+  lr: 1e-4
+  weight_decay: 0.01
+  scheduler: cosine
+  use_amp: true # Enable AMP for RTX 3090
+
+log:
+  log_dir: logs/phase1_rtx3090
+  save_dir: checkpoints/phase1_rtx3090

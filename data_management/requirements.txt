@@ -1,0 +1,5 @@
+huggingface_hub
+Pillow
+tqdm
+scikit-learn
+requests

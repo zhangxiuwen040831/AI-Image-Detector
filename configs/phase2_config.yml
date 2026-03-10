@@ -1,0 +1,44 @@
+
+experiment_name: phase2_optimization_rtx3090
+
+seed: 42
+
+device: cuda 
+num_workers: 10 # 12 vCPU
+
+data:
+  train_root: data/cifake/train
+  val_root: data/cifake/test
+  image_size: 224
+  batch_size: 24 # Hybrid model is larger, slightly reduced batch size
+
+model:
+  backbone_name: ViT-H-14
+  backbone_pretrained: laion2b_s32b_b79k
+  train_backbone: false
+  
+  # Phase 1: Metric Loss (kept)
+  use_metric: true
+  metric_lambda: 0.1
+  
+  use_lora: true
+  lora_rank: 16
+  lora_alpha: 32.0
+  lora_dropout: 0.1
+  
+  use_osd: true
+  osd_proj_dim: 128
+  osd_lambda_orth: 0.001
+  
+  # Phase 2: Hybrid Architecture (Frequency & Spatial) are enabled by code structure (HybridDetectorModel)
+
+train:
+  num_epochs: 10
+  lr: 1e-4
+  weight_decay: 0.01
+  scheduler: cosine
+  use_amp: true # Enable AMP
+
+log:
+  log_dir: logs/phase2_rtx3090
+  save_dir: checkpoints/phase2_rtx3090

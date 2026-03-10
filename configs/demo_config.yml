@@ -1,0 +1,32 @@
+experiment_name: demo_gpu_vitb16
+
+seed: 42
+
+device: cpu
+num_workers: 0
+
+data:
+  train_root: data/cifake/train
+  val_root: data/cifake/test
+  image_size: 224
+  batch_size: 8
+
+model:
+  train_backbone: false
+  use_lora: false
+  lora_rank: 8
+  lora_alpha: 16.0
+  lora_dropout: 0.0
+  use_osd: false
+  osd_proj_dim: 128
+  osd_lambda_orth: 0.001
+
+train:
+  num_epochs: 2
+  lr: 1e-4
+  weight_decay: 0.01
+  scheduler: cosine
+
+log:
+  log_dir: logs/demo
+  save_dir: checkpoints/demo

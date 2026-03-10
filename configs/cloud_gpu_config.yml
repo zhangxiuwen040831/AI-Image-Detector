@@ -1,0 +1,33 @@
+experiment_name: cloud_gpu_vitl14
+
+seed: 42
+
+device: cuda
+num_workers: 8
+
+data:
+  train_root: data/cifake/train  # 或 data/genimage/train，根据实际上传的数据集修改
+  val_root: data/cifake/test     # 或 data/genimage/val
+  image_size: 224
+  batch_size: 64 # 增加 batch size 以利用 GPU 显存
+
+model:
+  train_backbone: true # 微调 backbone 以提升性能
+  use_lora: true
+  lora_rank: 16 # 增加 rank
+  lora_alpha: 32.0
+  lora_dropout: 0.1
+  use_osd: true
+  osd_proj_dim: 128
+  osd_lambda_orth: 0.001
+
+train:
+  num_epochs: 20 # 增加 epochs
+  lr: 0.0001
+  weight_decay: 0.05
+  scheduler: cosine
+  use_amp: true # 启用混合精度
+
+log:
+  log_dir: logs/cloud_gpu
+  save_dir: checkpoints/cloud_gpu

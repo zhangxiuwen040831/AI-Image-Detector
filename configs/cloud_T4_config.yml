@@ -1,0 +1,32 @@
+experiment_name: phase2_optimization
+seed: 42
+device: cuda
+num_workers: 8
+data:
+  train_root: data/cifake/train
+  val_root: data/cifake/test
+  image_size: 224
+  batch_size: 4
+model:
+  backbone_name: ViT-H-14
+  backbone_pretrained: laion2b_s32b_b79k
+  train_backbone: false
+  use_metric: true
+  metric_lambda: 0.1
+  use_lora: true
+  lora_rank: 8
+  lora_alpha: 16.0
+  lora_dropout: 0.1
+  use_osd: true
+  osd_proj_dim: 128
+  osd_lambda_orth: 0.001
+train:
+  num_epochs: 5
+  lr: 0.0001
+  weight_decay: 0.01
+  scheduler: cosine
+  use_amp: true
+  gradient_accumulation_steps: 8
+log:
+  log_dir: logs/phase2
+  save_dir: checkpoints/phase2

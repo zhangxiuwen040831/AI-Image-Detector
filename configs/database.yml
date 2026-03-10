@@ -1,0 +1,30 @@
+database:
+  host: localhost
+  port: 3306
+  username: root
+  password: 123456
+  database: ai_image_detector
+  charset: utf8mb4
+  pool_size: 5
+  max_overflow: 10
+
+session:
+  secret_key: your-secret-key-change-this-in-production
+  token_expiry_hours: 24
+  cookie_name: ai_detector_session
+
+upload:
+  max_file_size_mb: 10
+  allowed_extensions:
+    - jpg
+    - jpeg
+    - png
+    - gif
+    - webp
+  storage_path: uploads/detections
+
+security:
+  enable_csrf: true
+  enable_xss_protection: true
+  password_min_length: 8
+  rate_limit_per_minute: 60
