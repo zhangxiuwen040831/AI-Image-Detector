@@ -84,7 +84,12 @@ class DataMerger:
     def __init__(self, source_dirs, target_dir, ratio=0.8):
         self.source_dirs = [Path(d) for d in source_dirs]
         self.target_dir = Path(target_dir)
-        self.ratio = ratio
+        self.ratio = ratio # Train ratio. Remaining is split equally between val and test? 
+        # Requirement: Train 80%, Val 10%, Test 10%
+        # So ratio=0.8 means 80% train.
+        self.val_ratio = 0.1
+        self.test_ratio = 0.1
+        
         self.manifest_file = self.target_dir / "fusion_manifest.json"
         self.manifest = {"files": [], "stats": {"added": 0, "skipped": 0, "conflicts": 0}}
         self.target_size = (224, 224)
@@ -106,7 +111,7 @@ class DataMerger:
         return self.manifest["stats"]
 
     def _prepare_target_dirs(self):
-        for split in ["train", "test"]:
+        for split in ["train", "val", "test"]:
             for cls in ["real", "fake"]:
                 (self.target_dir / split / cls).mkdir(parents=True, exist_ok=True)
 
@@ -140,8 +145,12 @@ class DataMerger:
 
     def _merge_cifake(self, source):
         print(f"Merging CIFAKE from {source}...")
-        # Map: train/REAL -> train/real, etc.
-        # CIFAKE usually has 'train' and 'test' folders, inside them 'REAL' and 'FAKE'
+        # CIFAKE usually has 'train' and 'test' folders.
+        # We map:
+        # source/train -> target/train (100%)
+        # source/test -> target/val (50%) + target/test (50%)
+        # This gives approx 83% train, 8.5% val, 8.5% test (since train is 100k, test is 20k)
+        
         for split in ["train", "test"]:
             for label_upper in ["REAL", "FAKE"]:
                 src_folder = source / split / label_upper
@@ -151,9 +160,22 @@ class DataMerger:
                 
                 if src_folder.exists():
                     label_lower = "real" if "real" in label_upper.lower() else "fake"
-                    # CIFAKE is already split, so respect its split
-                    for img_file in tqdm(list(src_folder.glob("*.*")), desc=f"CIFAKE {split}/{label_lower}"):
-                        self._process_image(img_file, split, label_lower)
+                    
+                    files = list(src_folder.glob("*.*"))
+                    # Sort to ensure deterministic split if needed, though we shuffle later or just iterate
+                    # Actually random shuffle is better for split
+                    random.shuffle(files)
+                    
+                    if split == "train":
+                        # All to train
+                        for img_file in tqdm(files, desc=f"CIFAKE {split}/{label_lower}"):
+                            self._process_image(img_file, "train", label_lower)
+                    else:
+                        # Split test into val/test
+                        mid = len(files) // 2
+                        for i, img_file in enumerate(tqdm(files, desc=f"CIFAKE {split}/{label_lower}")):
+                            target_split = "val" if i < mid else "test"
+                            self._process_image(img_file, target_split, label_lower)
 
     def _merge_artifact_subfolder(self, source):
         # Sampling strategy:
@@ -182,7 +204,10 @@ class DataMerger:
                 # Apply limit
                 rows = rows[:LIMIT_PER_FOLDER]
                 
-                split_idx = int(len(rows) * self.ratio)
+                # Split indices
+                n = len(rows)
+                train_end = int(n * self.ratio)
+                val_end = int(n * (self.ratio + self.val_ratio))
                 
                 for i, row in enumerate(tqdm(rows, desc=f"Artifact {source.name}")):
                     img_path = source / row["image_path"]
@@ -191,7 +216,13 @@ class DataMerger:
                     # 0 is real, others are fake. 
                     # Note: cycle_gan and pro_gan have mix of 0 and 6.
                     label = "real" if str(target) == "0" else "fake"
-                    split = "train" if i < split_idx else "test"
+                    
+                    if i < train_end:
+                        split = "train"
+                    elif i < val_end:
+                        split = "val"
+                    else:
+                        split = "test"
                     
                     self._process_image(img_path, split, label)
         except Exception as e:
