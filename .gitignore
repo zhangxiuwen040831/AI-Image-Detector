@@ -69,3 +69,7 @@ coverage/
 
 # Documentation build
 docs/_build/
+
+# Build and tools
+start_backend.spec
+tools/
