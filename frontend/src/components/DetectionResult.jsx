@@ -4,11 +4,14 @@ import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { CheckCircle, AlertTriangle } from 'lucide-react';
 
-const DetectionResult = ({ result }) => {
+const DetectionResult = ({ result, language = 'zh' }) => {
   if (!result) return null;
 
   const isAIGC = result.prediction === 'AIGC';
   const confidencePercent = Math.round(result.confidence * 100);
+  const aigcProbability = typeof result.probabilities?.aigc === 'number'
+    ? result.probabilities.aigc
+    : (typeof result.probability === 'number' ? result.probability : 0);
   
   return (
     <motion.div
@@ -33,17 +36,17 @@ const DetectionResult = ({ result }) => {
         </motion.div>
         
         <h2 className="text-4xl font-bold tracking-tight text-white neon-text">
-          {isAIGC ? "AI GENERATED" : "REAL IMAGE"}
+          {isAIGC ? (language === 'zh' ? "AI生成" : "AI Generated") : (language === 'zh' ? "真实图像" : "Real Image")}
         </h2>
         
         <div className="flex items-center gap-4 mt-2">
           <div className="px-4 py-2 bg-white/5 rounded-lg border border-white/10">
-            <span className="text-gray-400 text-xs uppercase tracking-wider block mb-1">Confidence</span>
+            <span className="text-gray-400 text-xs uppercase tracking-wider block mb-1">{language === 'zh' ? '置信度' : 'Confidence'}</span>
             <span className="text-2xl font-mono font-bold text-primary">{confidencePercent}%</span>
           </div>
           <div className="px-4 py-2 bg-white/5 rounded-lg border border-white/10">
-            <span className="text-gray-400 text-xs uppercase tracking-wider block mb-1">Probability</span>
-            <span className="text-2xl font-mono font-bold text-secondary">{result.probability.toFixed(4)}</span>
+            <span className="text-gray-400 text-xs uppercase tracking-wider block mb-1">{language === 'zh' ? '概率' : 'Probability'}</span>
+            <span className="text-2xl font-mono font-bold text-secondary">{aigcProbability.toFixed(4)}</span>
           </div>
         </div>
       </div>

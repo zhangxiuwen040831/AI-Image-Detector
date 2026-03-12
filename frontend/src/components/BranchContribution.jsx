@@ -3,12 +3,15 @@ import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { motion } from 'framer-motion';
 
-const BranchContribution = ({ scores }) => {
+const BranchContribution = ({ scores, language = 'zh' }) => {
+  const rgb = typeof scores?.rgb === 'number' ? scores.rgb : 0;
+  const noise = typeof scores?.noise === 'number' ? scores.noise : 0;
+  const frequency = typeof scores?.frequency === 'number' ? scores.frequency : 0;
   const data = useMemo(() => [
-    { name: 'RGB', score: scores.rgb * 100 },
-    { name: 'Noise', score: scores.noise * 100 },
-    { name: 'Freq', score: scores.frequency * 100 },
-  ], [scores]);
+    { name: 'RGB', score: rgb * 100 },
+    { name: language === 'zh' ? '噪声' : 'Noise', score: noise * 100 },
+    { name: language === 'zh' ? '频域' : 'Frequency', score: frequency * 100 },
+  ], [rgb, noise, frequency, language]);
 
   const COLORS = ['#DA205A', '#00D1FF', '#7C3AED'];
 
@@ -17,13 +20,13 @@ const BranchContribution = ({ scores }) => {
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.6, delay: 0.4 }}
-      className="glass-card p-6 h-full flex flex-col justify-center relative overflow-hidden"
+      className="glass-card rounded-2xl p-4 border border-white/10 flex flex-col justify-center relative overflow-hidden h-full min-w-0"
     >
-      <h3 className="text-lg font-bold text-white mb-4 text-center tracking-wider uppercase border-b border-white/10 pb-2 w-full">
-        Branch Contribution
+      <h3 className="h-8 leading-8 text-base font-medium text-white mb-3 text-center tracking-wider border-b border-white/10 pb-2 w-full">
+        {language === 'zh' ? '分支贡献分析' : 'Branch Contribution Analysis'}
       </h3>
       
-      <div className="w-full h-64 relative">
+      <div className="w-full h-48 relative">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
@@ -55,9 +58,9 @@ const BranchContribution = ({ scores }) => {
         </ResponsiveContainer>
       </div>
       
-      <div className="absolute bottom-4 right-4 text-xs text-gray-500 italic">
-        * Feature importance based on normalized activation
-      </div>
+      <p className="text-xs text-gray-400 text-center mt-3 leading-relaxed">
+        {language === 'zh' ? '该图展示三个分支对最终判定的影响占比，用于识别本次推理的关键证据来源。' : 'This chart shows the impact ratio of the three branches on the final decision, used to identify the key evidence sources for this inference.'}
+      </p>
     </motion.div>
   );
 };

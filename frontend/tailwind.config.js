@@ -14,8 +14,8 @@ export default {
         accent: '#7C3AED',
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['sans-serif'],
+        mono: ['monospace'],
       },
     },
   },

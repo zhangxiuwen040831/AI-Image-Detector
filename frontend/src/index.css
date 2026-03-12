@@ -1,5 +1,5 @@
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 
 @tailwind base;
 @tailwind components;
@@ -17,7 +17,7 @@
   }
   
   .glass-card {
-    @apply bg-white/5 backdrop-blur-lg border border-white/10 rounded-xl shadow-lg hover:border-white/20 transition-all duration-300;
+    @apply bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl shadow-lg hover:border-white/20 transition-all duration-300;
   }
   
   .neon-glow {

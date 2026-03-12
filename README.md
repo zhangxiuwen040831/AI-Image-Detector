@@ -10,7 +10,8 @@
 
 - **准确率 (Accuracy)**: **87.31%**
 - **AUC (Area Under Curve)**: **0.9496**
-- **训练速度**: \~930 img/s (RTX 5090)
+- **训练速度**: ~930 img/s (RTX 5090)
+- **推理速度**: CPU ~0.5s/张，GPU ~0.1s/张
 
 ## 🧠 算法架构
 
@@ -33,30 +34,38 @@
 
 ```text
 ai-image-detector/
-├── configs/            # 配置文件
-│   ├── dataset_config.yaml  # 核心训练配置 (Batch Size, LR, Paths)
-│   └── ...
-├── src/                # 源代码
-│   ├── data/           # 数据加载与预处理
-│   ├── models/         # 模型定义
-│   │   ├── detector.py # MultiBranchDetector 实现
-│   │   └── model.py    # AIGCImageDetector 封装
-│   ├── training/       # 训练循环与 Trainer
-│   └── utils/          # 工具函数
-├── tools/              # 运维与部署脚本
-│   ├── deploy.py       # 自动部署到云服务器
-│   ├── package_code.py # 代码打包
-│   └── monitor_*.py    # 训练监控脚本
+├── backend/            # 后端推理服务
+│   ├── detector.py     # 推理逻辑封装
+│   ├── explanation_service.py # 解释报告生成
+│   ├── main.py         # FastAPI 入口
+│   ├── requirements.txt
+│   └── transforms.py   # 图像处理转换
+├── build/              # 构建输出目录
 ├── frontend/           # 前端可视化项目
 │   ├── src/
 │   │   ├── components/ # 可视化组件
+│   │   ├── utils/      # 工具函数
 │   │   ├── App.jsx     # 主应用入口
-│   │   └── index.css   # 全局样式
+│   │   ├── index.css   # 全局样式
+│   │   └── main.jsx    # React 入口
+│   ├── index.html
+│   ├── package.json    # 前端依赖
 │   └── vite.config.js  # Vite 配置
-├── backend/            # 后端推理服务
-│   ├── main.py         # FastAPI 入口
-│   └── detector.py     # 推理逻辑封装
-└── README.md           # 项目文档
+├── scripts/            # 训练和部署脚本
+├── src/                # 源代码
+│   ├── adv/            # 对抗攻击相关
+│   ├── config/         # 配置文件
+│   ├── eval/           # 评估相关
+│   ├── explain/        # 模型解释
+│   ├── models/         # 模型定义
+│   ├── training/       # 训练循环与 Trainer
+│   └── utils/          # 工具函数
+├── tools/              # 工具脚本
+├── .gitignore
+├── README.md           # 项目文档
+├── requirements.txt    # 项目依赖
+├── start_backend.py    # 后端启动脚本
+└── start_backend.spec  # 打包配置
 ```
 
 ## 💻 前端技术文档
@@ -74,8 +83,6 @@ ai-image-detector/
 
 ### 2. 核心逻辑与分析模块
 
-由于前端逻辑较为轻量，核心业务逻辑主要集中在组件内部和 `App.jsx` 中。
-
 | 模块/文件                        | 职责         | 接口与数据流                                                                                               |
 | :--------------------------- | :--------- | :--------------------------------------------------------------------------------------------------- |
 | `App.jsx` (`handleUpload`)   | **API 通信** | • **输入**: `File` 对象• **调用**: `POST /detect`• **输出**: 更新 `result` 状态 (JSON)• **错误处理**: 捕获网络异常并显示错误提示。 |
@@ -92,6 +99,9 @@ ai-image-detector/
 | `NoiseResidualViewer.jsx` | **图像查看器**       | N/A              | • **展示**: SRM 噪声残差图 (Base64)。• **交互**: 点击放大查看像素级细节 (`pixelated` 渲染模式)，支持平滑过渡动画。            |
 | `FrequencySpectrum.jsx`   | **图像查看器**       | N/A              | • **展示**: FFT 频谱热力图 (Base64)。• **交互**: 同上，提供频谱异常的可视化检查。                                    |
 | `DetectionResult.jsx`     | **结果卡片**        | N/A              | • **展示**: 最终判定结果 (REAL/AIGC) 和置信度。• **动效**: 结果图标 (Check/Alert) 的弹跳动画和霓虹光效。                 |
+| `AttentionHeatmap.jsx`    | **热力图**         | N/A              | • **展示**: Grad-CAM 注意力热力图。• **交互**: 点击查看细节，支持热力图与原始图像叠加显示。                            |
+| `ExplanationReport.jsx`   | **解释报告**        | N/A              | • **展示**: 检测结果的详细解释。• **内容**: 包含检测依据、特征分析和置信度说明。                                  |
+| `Documentation.jsx`       | **文档页面**        | N/A              | • **展示**: 项目架构和技术文档。• **内容**: 包含系统架构、技术栈和使用说明。                                      |
 
 ### 4. 动画与交互
 
@@ -99,6 +109,27 @@ ai-image-detector/
 | :----------------- | :---- | :------------------------------------------------------------------------------------------------------------------------------------ |
 | **Framer Motion**  | 组件级动画 | • **页面进入**: `initial={{ opacity: 0 }}` -> `animate={{ opacity: 1 }}`• **列表加载**: `AnimatePresence` 实现结果面板的平滑展开。• **上传反馈**: 进度条的无限循环动画。 |
 | **CSS / Tailwind** | 装饰性动画 | • **背景**: 两个巨大的模糊圆球 (`blur-[120px]`) 在背景中缓慢脉冲 (`animate-pulse`)。• **光效**: `.neon-glow` 类实现的 CSS `box-shadow` 动画。                      |
+
+## 🛠️ 后端技术文档
+
+### 1. 核心文件
+
+| 文件路径                     | 作用           | 关键功能                                                                                                                                                                                                                    |
+| :----------------------- | :----------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/main.py`        | **API 入口**  | FastAPI 应用初始化，CORS 配置，API 端点定义 (`/detect`, `/detect/debug`)。                                                                                                                                                                      |
+| `backend/detector.py`    | **检测核心** | 模型加载与推理，Grad-CAM 生成，分支贡献度计算。                                                                                                                                                         |
+| `backend/transforms.py`  | **图像处理**    | SRM 滤波器应用，频域转换，图像预处理。 |
+| `backend/explanation_service.py` | **解释生成**     | 生成检测结果的详细解释报告，包含特征分析和置信度说明。                                                                                                                                     |
+
+### 2. API 端点
+
+- **`POST /detect`** - 检测图像是否为 AI 生成
+  - **输入**: 图像文件
+  - **输出**: 检测结果 JSON，包含预测结果、置信度、分支贡献度、可视化 artifacts
+
+- **`POST /detect/debug`** - 带调试信息的检测
+  - **输入**: 图像文件
+  - **输出**: 检测结果 JSON，包含详细的调试信息
 
 ## 🚀 快速开始
 
@@ -116,22 +147,22 @@ pip install -r requirements.txt
 
 ### 2. 数据准备
 
-项目支持自动融合 **CIFAKE** 和 **Artifact** 数据集。请确保数据放置在 `data/` 目录下，或在 `configs/dataset_config.yaml` 中配置 `local_dataset_root`。
+项目支持自动融合 **CIFAKE** 和 **Artifact** 数据集。请确保数据放置在 `data/` 目录下，或在配置文件中配置数据集路径。
 
 ### 3. 模型训练
 
 **本地训练**:
 
 ```bash
-python src/training/train.py --config configs/dataset_config.yaml
+python src/training/train.py --config config/dataset_config.yaml
 ```
 
-**云端部署与训练 (AutoDL/SeetaCloud)**:
+**云端部署与训练**:
 本项目包含完整的云端部署工具链：
 
-1. **打包代码**: `python tools/package_code.py`
-2. **一键部署**: `python tools/deploy.py` (自动上传、解压、环境配置并启动训练)
-3. **监控训练**: `python tools/monitor_training.py`
+1. **打包代码**: `python scripts/package_code.py`
+2. **一键部署**: `python scripts/deploy.py` (自动上传、解压、环境配置并启动训练)
+3. **监控训练**: `python scripts/monitor_training.py`
 
 ### 4. 启动可视化系统
 
@@ -151,9 +182,46 @@ npm run dev
 # 访问 http://localhost:5173
 ```
 
+## 🔧 环境要求
+
+### 前端
+- Node.js 16+
+- npm 7+
+
+### 后端
+- Python 3.8+
+- CUDA 11.8+ (推荐，用于 GPU 加速)
+- 至少 8GB 内存
+
+### 技术栈
+
+#### 前端
+- React 18.3.1
+- Framer Motion 11.11.10 (动画库)
+- Recharts 2.13.0 (图表库)
+- Tailwind CSS 3.4.14 (样式库)
+- Lucide React 0.454.0 (图标库)
+
+#### 后端
+- FastAPI 0.110.0+
+- PyTorch 2.0.0+
+- ONNX Runtime 1.16.0+
+- OpenCLIP 2.24.0+
+
+## 🎯 核心特性
+
+- **多模态检测** - 融合 RGB、噪声、频域特征
+- **可视化分析** - 热力图、频谱图、噪声残差图
+- **用户友好** - 直观的界面和流畅的交互
+- **多语言支持** - 中文/英文切换
+- **可扩展** - 支持不同模型和配置
+- **高性能** - 优化的推理速度
+- **模型解释** - Grad-CAM 注意力可视化
+- **详细报告** - 检测结果的详细解释
+
 ## 🛠️ 开发与维护
 
-- **代码打包**: `tools/package_code.py` 会自动忽略 `data/`, `logs/`, `checkpoints/` 等大文件，仅打包核心代码。
+- **代码打包**: `scripts/package_code.py` 会自动忽略 `data/`, `logs/`, `checkpoints/` 等大文件，仅打包核心代码。
 - **训练日志**: 训练过程日志保存在 `logs/pipeline_train.log`。
 - **模型权重**: 最佳模型保存在 `checkpoints/pipeline/best.pth`。
 
@@ -162,4 +230,3 @@ npm run dev
 - CIFAKE Dataset
 - Artifact Dataset
 - ResNet: Deep Residual Learning for Image Recognition
-

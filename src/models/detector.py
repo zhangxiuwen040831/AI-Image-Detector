@@ -56,3 +56,22 @@ class MultiBranchDetector(nn.Module):
             "freq_feat": freq_feat,
             "fused_feat": fused_feat,
         }
+    
+    def forward_with_features(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """前向传播并返回特征图"""
+        # 使用RGB分支的forward_with_features获取特征图
+        rgb_feat, rgb_feature_map = self.rgb_branch.forward_with_features(x)
+        noise_feat = self.noise_branch(x)
+        freq_feat = self.freq_branch(x)
+        fused_feat = self.fusion_module(rgb_feat, noise_feat, freq_feat)
+        logit = self.classifier(fused_feat)
+        probability = torch.sigmoid(logit)
+        return {
+            "logit": logit,
+            "probability": probability,
+            "rgb_feat": rgb_feat,
+            "noise_feat": noise_feat,
+            "freq_feat": freq_feat,
+            "fused_feat": fused_feat,
+            "rgb_feature_map": rgb_feature_map,
+        }

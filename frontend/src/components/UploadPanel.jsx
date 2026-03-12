@@ -4,7 +4,7 @@ import { Upload, X, FileImage, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 
-const UploadPanel = ({ onUpload, isAnalyzing }) => {
+const UploadPanel = ({ onUpload, isAnalyzing, language = 'zh' }) => {
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
@@ -76,9 +76,10 @@ const UploadPanel = ({ onUpload, isAnalyzing }) => {
       <AnimatePresence mode="wait">
         {!preview ? (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1 }}
             className={clsx(
               "relative border-2 border-dashed rounded-xl p-10 text-center transition-all duration-300 glass-card cursor-pointer group",
               dragActive ? "border-primary bg-primary/5 scale-[1.01]" : "border-white/20 hover:border-primary/50",
@@ -104,16 +105,43 @@ const UploadPanel = ({ onUpload, isAnalyzing }) => {
                 <Upload className="w-8 h-8 text-gray-400 group-hover:text-primary transition-colors" />
               </div>
               <div>
-                <h3 className="text-lg font-medium text-white mb-1">
-                  Upload Image for Analysis
-                </h3>
-                <p className="text-sm text-gray-400">
-                  Drag & drop or click to browse
-                </p>
+                <AnimatePresence mode="wait">
+                  <motion.h3 
+                    key={`${language}-upload-title`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-lg font-medium text-white mb-1 min-h-[24px]"
+                  >
+                    {language === 'zh' ? '上传图像进行分析' : 'Upload image for analysis'}
+                  </motion.h3>
+                </AnimatePresence>
+                <AnimatePresence mode="wait">
+                  <motion.p 
+                    key={`${language}-upload-desc`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-sm text-gray-400 min-h-[20px]"
+                  >
+                    {language === 'zh' ? '拖拽文件或点击浏览' : 'Drag file or click to browse'}
+                  </motion.p>
+                </AnimatePresence>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Supported: JPG, PNG, WEBP (Max 10MB)
-              </p>
+              <AnimatePresence mode="wait">
+                <motion.p 
+                  key={`${language}-upload-supported`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="text-xs text-gray-500 mt-2 min-h-[16px]"
+                >
+                  {language === 'zh' ? '支持：JPG, PNG, WEBP (最大10MB)' : 'Supported: JPG, PNG, WEBP (max 10MB)'}
+                </motion.p>
+              </AnimatePresence>
             </div>
           </motion.div>
         ) : (
@@ -144,12 +172,43 @@ const UploadPanel = ({ onUpload, isAnalyzing }) => {
               <div className="w-full md:w-1/2 p-6 flex flex-col justify-center items-start border-l border-white/10">
                 <div className="flex items-center gap-2 text-primary mb-2">
                   <FileImage className="w-5 h-5" />
-                  <span className="text-sm font-mono">IMAGE LOADED</span>
+                  <AnimatePresence mode="wait">
+                    <motion.span 
+                      key={`${language}-loaded`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="text-sm font-mono"
+                    >
+                      {language === 'zh' ? '图像已加载' : 'Image loaded'}
+                    </motion.span>
+                  </AnimatePresence>
                 </div>
-                <h3 className="text-xl font-bold text-white mb-4">Ready for Inspection</h3>
-                <p className="text-sm text-gray-400 mb-6">
-                  System will analyze RGB, Noise Residuals, and Frequency Spectrum.
-                </p>
+                <AnimatePresence mode="wait">
+                  <motion.h3 
+                    key={`${language}-ready`}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-xl font-bold text-white mb-4 min-h-[32px]"
+                  >
+                    {language === 'zh' ? '准备进行分析' : 'Ready for analysis'}
+                  </motion.h3>
+                </AnimatePresence>
+                <AnimatePresence mode="wait">
+                  <motion.p 
+                    key={`${language}-analyze`}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-sm text-gray-400 mb-6 min-h-[40px]"
+                  >
+                    {language === 'zh' ? '系统将分析RGB、噪声残差和频谱特征。' : 'The system will analyze RGB, noise residuals, and spectral features.'}
+                  </motion.p>
+                </AnimatePresence>
                 
                 {isAnalyzing && (
                   <div className="flex items-center gap-3 w-full">
@@ -161,7 +220,7 @@ const UploadPanel = ({ onUpload, isAnalyzing }) => {
                         transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
                       />
                     </div>
-                    <span className="text-xs font-mono text-primary animate-pulse">ANALYZING...</span>
+                    <span className="text-xs font-mono text-primary animate-pulse">{language === 'zh' ? '分析中...' : 'Analyzing...'}</span>
                   </div>
                 )}
               </div>

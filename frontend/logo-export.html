@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Detector Logo</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            background-color: #050505;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background-color: #DA205A;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(218, 32, 90, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="logo-icon">
+        <i data-lucide="shield"></i>
+    </div>
+    <script>
+        lucide.createIcons();
+        document.querySelector('[data-lucide="shield"]').style.width = '24px';
+        document.querySelector('[data-lucide="shield"]').style.height = '24px';
+        document.querySelector('[data-lucide="shield"]').style.fill = 'none';
+        document.querySelector('[data-lucide="shield"]').style.stroke = 'white';
+        document.querySelector('[data-lucide="shield"]').style.strokeWidth = '2';
+    </script>
+</body>
+</html>
