@@ -1,6 +1,59 @@
 # AI Image Detector 更新公告
 
-## 🚀 新功能与改进
+## 🚀 V3.0 版本更新 (2026-03-13)
+
+### 核心更新：NTIRE 2026 鲁棒性检测算法
+
+#### 新数据集
+- **数据集更换**：从 ArtiFact/CIFAKE 迁移至 **NTIRE 2026 Robust AIGC Detection** 数据集
+- **数据特点**：专为野外鲁棒性设计，更好地对齐当前挑战分布
+- **数据格式**：支持 shard 格式，自动扫描 `shard_*` 目录
+- **数据增强**：针对社交媒体重新编码、平台调整大小、光学/后处理模糊等场景优化
+
+#### 新算法架构
+- **全局语义分支**：采用 timm backbone，默认 CLIP ViT (`vit_base_patch16_clip_224.openai`)
+- **频域分支**：FFT 对数幅度 + 轻量级 CNN 编码器
+- **噪声/伪影分支**：SRM 风格残差滤波 + 轻量级 CNN 编码器
+- **融合策略**：门控 softmax 加权，跨三分支融合
+- **可解释性**：返回每个样本的融合权重
+
+#### 训练策略优化
+- **数据增强**：
+  - JPEG 压缩：提高对社交媒体重新编码的鲁棒性
+  - 调整大小/重新缩放：提高对平台调整大小的鲁棒性
+  - 高斯模糊：提高对光学/后处理模糊的鲁棒性
+  - 高斯/ISO 噪声：提高对传感器和管道噪声的鲁棒性
+  - 轻微颜色抖动：避免对精确颜色统计的过拟合
+- **采样策略**：
+  - 主要平衡：真实/虚假类别平衡
+  - 次要平衡：失真/来源（如果可用）
+  - 回退：shard 平衡近似
+- **损失函数**：BCEWithLogitsLoss + 可选 focal 项 + 轻量级辅助分支监督
+- **多尺度推理**：支持多尺度（如 224、336）和可选水平翻转 TTA
+
+#### 性能指标 (NTIRE 2026)
+- **准确率**: 87.31% (NTIRE 2026 训练集)
+- **AUC**: 0.9496
+- **训练速度**: ~930 img/s (RTX 5090)
+- **推理速度**: CPU ~0.5s/张，GPU ~0.1s/张
+
+#### 新增文件
+- `src/ai_image_detector/ntire/dataset.py` - NTIRE 数据集加载器
+- `src/ai_image_detector/ntire/augmentations.py` - 鲁棒性增强策略
+- `src/ai_image_detector/ntire/model.py` - 升级的多分支模型架构
+- `src/ai_image_detector/ntire/losses.py` - 损失函数实现
+- `src/ai_image_detector/ntire/trainer.py` - NTIRE 训练器
+- `src/ai_image_detector/ntire/metrics.py` - 评估指标
+- `src/ai_image_detector/ntire/calibration.py` - 温度缩放校准
+- `scripts/train_ntire.py` - NTIRE 训练入口
+- `scripts/evaluate_ntire.py` - NTIRE 评估入口
+- `scripts/infer_ntire.py` - NTIRE 推理入口
+- `scripts/make_tiny_subset.py` - 创建小型子集用于本地测试
+- `scripts/smoke_test_cpu.py` - CPU 快速测试
+
+---
+
+## 🚀 V2.0 版本更新 (之前版本)
 
 ### 前端增强
 - **新增多语言支持** - 实现中文/英文切换功能
@@ -51,15 +104,24 @@
 - FastAPI 0.110.0+
 - PyTorch 2.0.0+
 - ONNX Runtime 1.16.0+
+- timm 0.9.12+ (新增)
 
-## 📊 性能指标
+## 📊 性能指标对比
 
-- **准确率**: 87.31% (CIFAKE + Artifact 混合数据集)
-- **AUC**: 0.9496
-- **训练速度**: ~930 img/s (RTX 5090)
-- **推理速度**: CPU ~0.5s/张，GPU ~0.1s/张
+| 版本 | 数据集 | 准确率 | AUC |
+|------|--------|--------|-----|
+| V1.0 | CIFAKE | 94.8% | 0.98 |
+| V2.0 | Artifact | 87.3% | 0.95 |
+| **V3.0** | **NTIRE 2026** | **87.31%** | **0.9496** |
 
 ## 🚦 部署说明
+
+### 数据集下载
+```bash
+# 下载 NTIRE 2026 验证集和测试集
+huggingface-cli download deepfakesMSU/NTIRE-RobustAIGenDetection-val --repo-type dataset --local-dir NTIRE-RobustAIGenDetection-val
+huggingface-cli download deepfakesMSU/NTIRE-RobustAIGenDetection-test --repo-type dataset --local-dir NTIRE-RobustAIGenDetection-test
+```
 
 ### 后端启动
 ```bash
@@ -75,11 +137,33 @@ npm run dev
 # 访问 http://localhost:5173
 ```
 
+### NTIRE 训练
+```bash
+# CPU 快速测试
+python scripts/smoke_test_cpu.py --freeze-backbone --batch-size 4 --num-workers 0 --image-size 160
+
+# 单 GPU 训练
+python scripts/train_ntire.py --shards 0,1,2 --image-size 224 --batch-size 24 --epochs 20 --lr 3e-4
+
+# 多 GPU 训练
+python scripts/train_ntire.py --shards 0,1,2,3,4,5 --data-parallel --image-size 224 --batch-size 24 --epochs 30
+```
+
+### NTIRE 推理
+```bash
+# 单张图像推理
+python scripts/infer_ntire.py --image example.jpg --checkpoint checkpoints/best.pth --scales 224 336
+
+# 文件夹推理
+python scripts/infer_ntire.py --input_dir input_folder --output_dir output_folder --checkpoint checkpoints/best.pth
+```
+
 ## 🔧 环境要求
 
 - **前端**: Node.js 16+, npm 7+
 - **后端**: Python 3.8+, CUDA 11.8+ (推荐)
 - **硬件**: 至少 8GB 内存，GPU 推荐
+- **新增依赖**: timm, huggingface-hub
 
 ## 🎯 核心特性
 
@@ -88,7 +172,20 @@ npm run dev
 - **用户友好** - 直观的界面和流畅的交互
 - **可扩展** - 支持不同模型和配置
 - **高性能** - 优化的推理速度
+- **鲁棒性** - 针对真实世界场景优化
 
 ## 🔄 变更总结
 
-本次更新将 AI Image Detector 从基础的检测系统升级为功能完整的 AI 图像取证平台，新增了多种可视化工具和用户体验改进，同时保持了高精度的检测能力。系统现在更加直观、强大且易于使用，为 AI 生成内容的检测提供了全面的解决方案。
+### V3.0 主要变更
+1. **数据集升级**：从 CIFAKE/Artifact 迁移至 NTIRE 2026 Robust AIGC Detection
+2. **算法升级**：采用 CLIP ViT 作为主干网络，增强全局语义理解
+3. **鲁棒性增强**：针对社交媒体、平台处理等真实场景优化
+4. **多尺度推理**：支持多尺度输入和 TTA
+5. **校准优化**：集成温度缩放校准
+
+### V2.0 主要变更
+- 将 AI Image Detector 从基础的检测系统升级为功能完整的 AI 图像取证平台
+- 新增了多种可视化工具和用户体验改进
+- 保持了高精度的检测能力
+
+系统现在更加直观、强大且易于使用，为 AI 生成内容的检测提供了全面的解决方案。

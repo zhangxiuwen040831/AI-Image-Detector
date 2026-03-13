@@ -1,75 +1,57 @@
-# IDE related files
-.idea/
-.vscode/
-
-# Environment and tools
-.trae/
-
-# Build outputs
-dist/
-frontend/dist/
-
-# Logs
-logs/
-
-# Model files
-model/
-checkpoints/
-
-# Cache files
-__pycache__/
-**/__pycache__/
-
-# Compressed files
-*.tar.gz
-*.zip
-*.rar
-
-# Configuration files (may contain sensitive information)
-configs/
-
-# Database related
-data_management/
-
-# Data directories
-data/
-datasets/
-
-# Frontend dependencies
-node_modules/
-frontend/node_modules/
+# Dataset directories
+NTIRE-RobustAIGenDetection-train/
+NTIRE-RobustAIGenDetection-val/
+NTIRE-RobustAIGenDetection-test/
 
 # Temporary files
+tmp_ntire_mock/
+tmp_tiny.csv
 *.tmp
-*.temp
 
-# Report files
-jindu.md
-remote_prepare_report.json
-dataset_index.json
+# Model weights
+*.pth
+*.pt
+*.onnx
+*.ckpt
 
-# OS generated files
-Thumbs.db
-.DS_Store
-
-# Python bytecode
+# Python cache
+__pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Legacy code (old version)
+legacy/
+
+# Checkpoints (large files)
+checkpoints/
+*.pth.tar
+
+# Jupyter
+.ipynb_checkpoints/
 
 # Environment variables
 .env
 .env.local
-.env.*.local
-
-# Testing
-pytest_cache/
-
-# Coverage
-coverage/
-.coverage
-
-# Documentation build
-docs/_build/
-
-# Build and tools
-start_backend.spec
-tools/
