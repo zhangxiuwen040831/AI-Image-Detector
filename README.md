@@ -16,7 +16,16 @@ AI Image Detector 是一个先进的 AI 生成图像取证分析系统，专为 
 
 ***
 
-## 2️⃣ Architecture Overview
+## 2️⃣ Screenshots
+
+![Login Screen](docs/assets/login_screen.png)
+![Main Interface](docs/assets/main_interface.png)
+![Analysis Panel](docs/assets/analysis_panel.png)
+![Documentation Intro](docs/assets/documentation_intro.png)
+
+***
+
+## 3️⃣ Architecture Overview
 
 本项目的核心是一个多模态混合检测器，其结构设计如下：
 
@@ -45,7 +54,7 @@ Branch   Branch     Branch
 - **Frequency Branch**: 通过 FFT 变换提取图像的频域特征
 - **Noise Branch**: 利用 SRM 滤波器提取噪声残差
 
-### 2.1 System Architecture
+### 3.1 System Architecture
 
 ```mermaid
 graph TB
@@ -62,7 +71,7 @@ graph TB
     Frontend -->|Display| User
 ```
 
-### 2.2 Training Pipeline
+### 3.2 Training Pipeline
 
 ```mermaid
 graph TB
@@ -79,7 +88,7 @@ graph TB
     Checkpoint -->|Load| Model
 ```
 
-### 2.3 Inference Pipeline
+### 3.3 Inference Pipeline
 
 ```mermaid
 graph TB
