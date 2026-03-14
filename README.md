@@ -1,232 +1,433 @@
-# AI Image Detector (Multi-Branch ResNet18)
+# 🔍 AI Image Detector
 
-基于多分支架构（RGB + 噪声 + 频域）的 AI 生成图像检测系统。本项目旨在通过融合多模态特征，高精度识别由 AIGC（AI Generated Content）模型生成的伪造图像。
+AI Image Detector 是一个先进的 AI 生成图像取证分析系统，专为 NTIRE 2026 Robust AIGC Detection 挑战设计。该项目采用多分支架构，融合 RGB 视觉特征、频域频谱特征和噪声残差特征，支持完整的训练、评估、推理流程，并提供基于 React + FastAPI 的 Web 界面和 GradCAM 可解释性分析。
 
-当前版本采用 **ResNet18** 作为核心骨干网络，并在 **CIFAKE** 与 **Artifact** 混合数据集上取得了优异性能。
+***
 
-## 📊 核心性能
+## 1️⃣ Key Features
 
-在混合数据集（CIFAKE + Artifact）上的测试结果（Epoch 10）：
+- **Multi-Branch Architecture**: 三路并行网络（RGB/Frequency/Noise），融合语义、频谱和噪声残差特征
+- **NTIRE 2026 Support**: 完整支持 NTIRE Robust AIGC Detection 数据集和评估标准
+- **Training / Evaluation / Inference Pipelines**: 端到端的训练、评估和推理流程
+- **FastAPI Backend Service**: 高性能异步推理 API
+- **React Frontend Interface**: 现代化 Web 界面，支持图像上传和结果可视化
+- **GradCAM Explainability**: 类激活热力图，可视化模型决策依据
+- **YAML/Config-Driven Workflow**: 灵活的配置文件驱动设计
 
-- **准确率 (Accuracy)**: **87.31%**
-- **AUC (Area Under Curve)**: **0.9496**
-- **训练速度**: ~930 img/s (RTX 5090)
-- **推理速度**: CPU ~0.5s/张，GPU ~0.1s/张
+***
 
-## 🧠 算法架构
+## 2️⃣ Architecture Overview
 
-本项目采用 **Multi-Branch Detector** 架构，支持以下特征分支的灵活组合：
+本项目的核心是一个多模态混合检测器，其结构设计如下：
 
-1. **RGB 分支 (主分支)**:
-   - **Backbone**: ResNet18 (预训练)
-   - **作用**: 提取图像的高层语义特征和纹理细节。
-   - **配置**: 默认启用 (`rgb_pretrained=True`)。
-2. **噪声分支 (Noise Branch)**:
-   - **作用**: 通过隐写分析滤波器（SRM/Bayar）提取图像的噪声残差，捕捉生成模型留下的指纹痕迹。
-   - **状态**: 可选开启。
-3. **频域分支 (Frequency Branch)**:
-   - **作用**: 利用 DCT/FFT 变换分析图像在频域上的异常分布（如棋盘格效应）。
-   - **状态**: 可选开启。
-
-**融合策略**: 各分支特征经过提取后，在全连接层前进行拼接 (Concatenation)，并通过 MLP 进行最终分类。
-
-## 📁 项目结构
-
-```text
-ai-image-detector/
-├── backend/            # 后端推理服务
-│   ├── detector.py     # 推理逻辑封装
-│   ├── explanation_service.py # 解释报告生成
-│   ├── main.py         # FastAPI 入口
-│   ├── requirements.txt
-│   └── transforms.py   # 图像处理转换
-├── build/              # 构建输出目录
-├── frontend/           # 前端可视化项目
-│   ├── src/
-│   │   ├── components/ # 可视化组件
-│   │   ├── utils/      # 工具函数
-│   │   ├── App.jsx     # 主应用入口
-│   │   ├── index.css   # 全局样式
-│   │   └── main.jsx    # React 入口
-│   ├── index.html
-│   ├── package.json    # 前端依赖
-│   └── vite.config.js  # Vite 配置
-├── scripts/            # 训练和部署脚本
-├── src/                # 源代码
-│   ├── adv/            # 对抗攻击相关
-│   ├── config/         # 配置文件
-│   ├── eval/           # 评估相关
-│   ├── explain/        # 模型解释
-│   ├── models/         # 模型定义
-│   ├── training/       # 训练循环与 Trainer
-│   └── utils/          # 工具函数
-├── tools/              # 工具脚本
-├── .gitignore
-├── README.md           # 项目文档
-├── requirements.txt    # 项目依赖
-├── start_backend.py    # 后端启动脚本
-└── start_backend.spec  # 打包配置
+```
+      Input Image
+           │
+  ┌────────┼──────────┐
+  │        │          │
+  ▼        ▼          ▼
+ RGB   Frequency    Noise
+Branch   Branch     Branch
+(CLIP ViT) (FFT+CNN) (SRM+CNN)
+  │        │          │
+  └────────┼──────────┘
+           ▼
+     Gated Fusion
+    (Feature Concat)
+           ▼
+    Binary Classifier
+           ▼
+      Prediction
+     (REAL vs AIGC)
 ```
 
-## 💻 前端技术文档
+- **RGB Branch**: 使用预训练的 CLIP ViT 提取高层语义特征
+- **Frequency Branch**: 通过 FFT 变换提取图像的频域特征
+- **Noise Branch**: 利用 SRM 滤波器提取噪声残差
 
-本项目前端采用 **React + Vite** 构建，专注于高性能的 AI 取证可视化分析。
+### 2.1 System Architecture
 
-### 1. 主界面文件
+```mermaid
+graph TB
+    User[User] --> Frontend[React Frontend]
+    Frontend -->|HTTP Request| Backend[FastAPI Backend]
+    Backend -->|Load Config| Configs[Configs]
+    Backend -->|Load Model| Checkpoints[Checkpoints]
+    Backend -->|Inference Request| Inference[Inference Engine]
+    Inference -->|Forward Pass| Model[AI Model]
+    Inference -->|Generate| GradCAM[GradCAM Explanation]
+    Model -->|Prediction| Backend
+    GradCAM -->|Heatmap| Backend
+    Backend -->|Response| Frontend
+    Frontend -->|Display| User
+```
 
-| 文件路径                     | 作用           | 关键配置与依赖                                                                                                                                                                                                                    |
-| :----------------------- | :----------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `frontend/index.html`    | **HTML 入口**  | 引入 Google Fonts (Inter, JetBrains Mono)，挂载 React 根节点。                                                                                                                                                                      |
-| `frontend/src/main.jsx`  | **React 入口** | 负责渲染 `<App />`，引入全局样式 `index.css`。使用 `ReactDOM.createRoot` 启用并发模式。                                                                                                                                                         |
-| `frontend/src/App.jsx`   | **应用主容器**    | • **布局**: 包含 Header, UploadPanel, Analysis Dashboard, Footer。• **逻辑**: 处理文件上传、调用后端 API、管理分析状态 (`isAnalyzing`) 和结果数据。• **性能**: 使用 `React.lazy` 和 `Suspense` 懒加载所有图表组件，确保首屏秒开。• **动效**: 使用 `framer-motion` 实现页面级过渡和背景动态模糊效果。 |
-| `frontend/src/index.css` | **全局样式**     | 基于 **Tailwind CSS**。定义了 `.glass` (毛玻璃), `.neon-glow` (霓虹光晕), `.text-gradient` 等自定义原子类。                                                                                                                                     |
+### 2.2 Training Pipeline
 
-### 2. 核心逻辑与分析模块
+```mermaid
+graph TB
+    Config[Configs/train] -->|Load Params| Trainer[Trainer]
+    Dataset[Datasets] -->|Load| DataLoader[DataLoader]
+    DataLoader -->|Batch| Transforms[Transforms]
+    Transforms -->|Augmentation| Model[Multi-Branch Model]
+    Model -->|Output| Loss[Loss Function]
+    Loss -->|Backward| Optimizer[Optimizer]
+    Optimizer -->|Update| Model
+    Trainer -->|Train Epoch| DataLoader
+    Trainer -->|Validate| DataLoader
+    Trainer -->|Save| Checkpoint[Checkpoint]
+    Checkpoint -->|Load| Model
+```
 
-| 模块/文件                        | 职责         | 接口与数据流                                                                                               |
-| :--------------------------- | :--------- | :--------------------------------------------------------------------------------------------------- |
-| `App.jsx` (`handleUpload`)   | **API 通信** | • **输入**: `File` 对象• **调用**: `POST /detect`• **输出**: 更新 `result` 状态 (JSON)• **错误处理**: 捕获网络异常并显示错误提示。 |
-| `components/UploadPanel.jsx` | **文件处理**   | • **职责**: 拖拽上传、文件类型校验 (Image only)、大小限制 (10MB)、生成本地预览 (FileReader)。• **交互**: 提供上传进度动画和拖拽反馈。          |
+### 2.3 Inference Pipeline
 
-### 3. 图表与可视化组件
+```mermaid
+graph TB
+    Image[Input Image] -->|Load| Preprocess[Preprocessing]
+    Preprocess -->|Resize/Normalize| Model[AI Model]
+    Model -->|Feature Extraction| Detector[ForensicDetector]
+    Detector -->|Branch Scores| Prediction[Prediction]
+    Detector -->|Optional| GradCAM[GradCAM]
+    GradCAM -->|Heatmap| Explanation[Explanation Report]
+    Prediction -->|Output| Result[Detection Result]
+    Explanation -->|Report| Result
+```
 
-所有图表组件均位于 `frontend/src/components/` 目录下，采用 **Recharts** 进行数据可视化，支持响应式布局。
+更多详细的架构图请参考 [docs/architecture.md](docs/architecture.md)。
 
-| 组件文件                      | 类型              | 库版本              | 功能与配置                                                                                      |
-| :------------------------ | :-------------- | :--------------- | :----------------------------------------------------------------------------------------- |
-| `ProbabilityChart.jsx`    | **环形图 (Donut)** | `recharts ^2.13` | • **展示**: 真/假概率分布。• **配置**: 自定义 Tooltip 样式，中心显示主概率数值。• **动效**: 初始加载时的扇区展开动画。               |
-| `BranchContribution.jsx`  | **条形图 (Bar)**   | `recharts ^2.13` | • **展示**: RGB、噪声、频域三个分支的贡献度。• **配置**: 水平条形图，自定义颜色映射。• **适配**: `ResponsiveContainer` 自适应宽度。 |
-| `NoiseResidualViewer.jsx` | **图像查看器**       | N/A              | • **展示**: SRM 噪声残差图 (Base64)。• **交互**: 点击放大查看像素级细节 (`pixelated` 渲染模式)，支持平滑过渡动画。            |
-| `FrequencySpectrum.jsx`   | **图像查看器**       | N/A              | • **展示**: FFT 频谱热力图 (Base64)。• **交互**: 同上，提供频谱异常的可视化检查。                                    |
-| `DetectionResult.jsx`     | **结果卡片**        | N/A              | • **展示**: 最终判定结果 (REAL/AIGC) 和置信度。• **动效**: 结果图标 (Check/Alert) 的弹跳动画和霓虹光效。                 |
-| `AttentionHeatmap.jsx`    | **热力图**         | N/A              | • **展示**: Grad-CAM 注意力热力图。• **交互**: 点击查看细节，支持热力图与原始图像叠加显示。                            |
-| `ExplanationReport.jsx`   | **解释报告**        | N/A              | • **展示**: 检测结果的详细解释。• **内容**: 包含检测依据、特征分析和置信度说明。                                  |
-| `Documentation.jsx`       | **文档页面**        | N/A              | • **展示**: 项目架构和技术文档。• **内容**: 包含系统架构、技术栈和使用说明。                                      |
+***
 
-### 4. 动画与交互
+## 3️⃣ Backend API
 
-| 技术栈                | 用途    | 关键实现                                                                                                                                  |
-| :----------------- | :---- | :------------------------------------------------------------------------------------------------------------------------------------ |
-| **Framer Motion**  | 组件级动画 | • **页面进入**: `initial={{ opacity: 0 }}` -> `animate={{ opacity: 1 }}`• **列表加载**: `AnimatePresence` 实现结果面板的平滑展开。• **上传反馈**: 进度条的无限循环动画。 |
-| **CSS / Tailwind** | 装饰性动画 | • **背景**: 两个巨大的模糊圆球 (`blur-[120px]`) 在背景中缓慢脉冲 (`animate-pulse`)。• **光效**: `.neon-glow` 类实现的 CSS `box-shadow` 动画。                      |
+本项目提供基于 FastAPI 的高性能推理后端，支持完整的图像检测和可解释性功能。
 
-## 🛠️ 后端技术文档
+### 3.1 Architecture
 
-### 1. 核心文件
+```mermaid
+graph LR
+    React[React Frontend] -->|HTTP| FastAPI[FastAPI Server]
+    FastAPI -->|Initialize| Detector[ForensicDetector]
+    FastAPI -->|Load| Config[Configs]
+    FastAPI -->|Load| Model[Model Checkpoint]
+    Detector -->|Forward| Model
+    Detector -->|Generate| GradCAM[GradCAM]
+    Detector -->|Generate| SRM[SRM Noise]
+    Detector -->|Generate| Spectrum[Frequency Spectrum]
+    Model -->|Prediction| FastAPI
+    GradCAM -->|Heatmap| FastAPI
+    SRM -->|Residual| FastAPI
+    Spectrum -->|Heatmap| FastAPI
+    FastAPI -->|JSON| React
+```
 
-| 文件路径                     | 作用           | 关键功能                                                                                                                                                                                                                    |
-| :----------------------- | :----------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/main.py`        | **API 入口**  | FastAPI 应用初始化，CORS 配置，API 端点定义 (`/detect`, `/detect/debug`)。                                                                                                                                                                      |
-| `backend/detector.py`    | **检测核心** | 模型加载与推理，Grad-CAM 生成，分支贡献度计算。                                                                                                                                                         |
-| `backend/transforms.py`  | **图像处理**    | SRM 滤波器应用，频域转换，图像预处理。 |
-| `backend/explanation_service.py` | **解释生成**     | 生成检测结果的详细解释报告，包含特征分析和置信度说明。                                                                                                                                     |
+### 3.2 API Endpoints
 
-### 2. API 端点
+- **POST /detect**: 主检测接口，上传图像获取检测结果
+- **POST /detect/debug**: 调试模式接口，返回完整的调试信息
 
-- **`POST /detect`** - 检测图像是否为 AI 生成
-  - **输入**: 图像文件
-  - **输出**: 检测结果 JSON，包含预测结果、置信度、分支贡献度、可视化 artifacts
+### 3.3 Key Features
 
-- **`POST /detect/debug`** - 带调试信息的检测
-  - **输入**: 图像文件
-  - **输出**: 检测结果 JSON，包含详细的调试信息
+- **React Frontend**: 现代化的 Web 界面，支持图像上传和结果可视化
+- **FastAPI Backend**: 高性能异步 API，支持并发请求
+- **AI Inference**: 集成 ForensicDetector 封装的多分支模型推理
+- **GradCAM Explainability**: 生成类激活热力图，可视化模型决策依据
 
-## 🚀 快速开始
+***
 
-### 1. 环境安装
+## 4️⃣ Detection Pipeline
+
+完整的检测流程如下：
+
+```
+Image
+  ↓
+Preprocessing (Resize, Normalize)
+  ↓
+Feature Extraction (RGB, Freq, Noise)
+  ↓
+Feature Fusion (Gated Attention)
+  ↓
+Classifier (MLP Head)
+  ↓
+Probability Calibration (Temperature Scaling)
+  ↓
+Prediction & Explanation Generation
+```
+
+***
+
+## 5️⃣ Project Structure
+
+```
+ai-image-detector/
+ ├── configs/              # YAML 配置文件
+ ├── docs/                 # 项目文档
+ │    └── architecture.md  # 架构图文档
+ ├── frontend/             # React 前端
+ ├── scripts/              # 命令行工具
+ │    ├── tools/           # 辅助工具脚本
+ │    ├── train.py         # 通用训练入口
+ │    ├── evaluate.py      # 通用评估入口
+ │    ├── infer.py         # 通用推理入口
+ │    ├── train_ntire.py   # NTIRE 训练入口
+ │    ├── evaluate_ntire.py # NTIRE 评估入口
+ │    ├── infer_ntire.py   # NTIRE 推理入口
+ │    └── start_backend.py # 后端服务启动
+ ├── services/             # 后端 API 服务
+ │    └── api/
+ ├── src/                  # 源代码
+ │    └── ai_image_detector/
+ │         ├── datasets/    # 数据集定义
+ │         ├── models/      # 模型定义
+ │         ├── ntire/       # NTIRE 专用模块
+ │         ├── training/    # 训练逻辑
+ │         ├── inference/   # 推理封装
+ │         ├── evaluation/  # 评估逻辑
+ │         ├── explain/     # 可解释性工具
+ │         ├── data/        # 数据加载
+ │         └── utils/       # 工具函数
+ └── requirements.txt       # 项目依赖
+```
+
+**关键模块说明**:
+
+- `src/ai_image_detector/models`: 包含 `HybridAIGCDetector` 及其子模块
+- `src/ai_image_detector/ntire`: NTIRE 2026 挑战专用模块
+- `src/ai_image_detector/training`: 实现了带有混合精度和 EMA 的 Trainer
+- `services/api`: 基于 FastAPI 的高性能推理服务
+- `frontend`: 基于 React + Vite 的可视化分析仪表板
+
+***
+
+## 6️⃣ Installation
+
+### 6.1 Python 依赖安装
 
 ```bash
-# 创建虚拟环境
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
-
-# 安装依赖
+git clone <repo_url>
+cd ai-image-detector
 pip install -r requirements.txt
 ```
 
-### 2. 数据准备
+### 6.2 GPU 支持 (推荐)
 
-项目支持自动融合 **CIFAKE** 和 **Artifact** 数据集。请确保数据放置在 `data/` 目录下，或在配置文件中配置数据集路径。
-
-### 3. 模型训练
-
-**本地训练**:
+为了获得最佳性能，请安装支持 CUDA 的 PyTorch 版本：
 
 ```bash
-python src/training/train.py --config config/dataset_config.yaml
+pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu118
 ```
 
-**云端部署与训练**:
-本项目包含完整的云端部署工具链：
-
-1. **打包代码**: `python scripts/package_code.py`
-2. **一键部署**: `python scripts/deploy.py` (自动上传、解压、环境配置并启动训练)
-3. **监控训练**: `python scripts/monitor_training.py`
-
-### 4. 启动可视化系统
-
-**启动后端 (API)**:
-
-```bash
-python start_backend.py
-# 服务运行在 http://localhost:8000
-```
-
-**启动前端 (Dashboard)**:
+### 6.3 Frontend 依赖安装
 
 ```bash
 cd frontend
 npm install
-npm run dev
-# 访问 http://localhost:5173
 ```
 
-## 🔧 环境要求
+***
 
-### 前端
-- Node.js 16+
-- npm 7+
+## 7️⃣ Dataset
 
-### 后端
-- Python 3.8+
-- CUDA 11.8+ (推荐，用于 GPU 加速)
-- 至少 8GB 内存
+本项目使用 **NTIRE-RobustAIGenDetection-train** 数据集进行训练。数据集结构：
 
-### 技术栈
+```
+NTIRE-RobustAIGenDetection-train/
+ ├── shard_0/
+ ├── shard_1/
+ ├── shard_2/
+ └── ...
+```
 
-#### 前端
-- React 18.3.1
-- Framer Motion 11.11.10 (动画库)
-- Recharts 2.13.0 (图表库)
-- Tailwind CSS 3.4.14 (样式库)
-- Lucide React 0.454.0 (图标库)
+可选下载验证集和测试集：
 
-#### 后端
-- FastAPI 0.110.0+
-- PyTorch 2.0.0+
-- ONNX Runtime 1.16.0+
-- OpenCLIP 2.24.0+
+```bash
+huggingface-cli download deepfakesMSU/NTIRE-RobustAIGenDetection-val --repo-type dataset --local-dir NTIRE-RobustAIGenDetection-val
+huggingface-cli download deepfakesMSU/NTIRE-RobustAIGenDetection-test --repo-type dataset --local-dir NTIRE-RobustAIGenDetection-test
+```
 
-## 🎯 核心特性
+***
 
-- **多模态检测** - 融合 RGB、噪声、频域特征
-- **可视化分析** - 热力图、频谱图、噪声残差图
-- **用户友好** - 直观的界面和流畅的交互
-- **多语言支持** - 中文/英文切换
-- **可扩展** - 支持不同模型和配置
-- **高性能** - 优化的推理速度
-- **模型解释** - Grad-CAM 注意力可视化
-- **详细报告** - 检测结果的详细解释
+## 8️⃣ Training
 
-## 🛠️ 开发与维护
+### 8.1 通用训练
 
-- **代码打包**: `scripts/package_code.py` 会自动忽略 `data/`, `logs/`, `checkpoints/` 等大文件，仅打包核心代码。
-- **训练日志**: 训练过程日志保存在 `logs/pipeline_train.log`。
-- **模型权重**: 最佳模型保存在 `checkpoints/pipeline/best.pth`。
+使用 `scripts/train.py` 启动通用训练：
 
-## 📝 引用与致谢
+```bash
+python scripts/train.py --config configs/train/default.yml
+```
 
-- CIFAKE Dataset
-- Artifact Dataset
-- ResNet: Deep Residual Learning for Image Recognition
+### 8.2 NTIRE 训练
+
+使用 `scripts/train_ntire.py` 启动 NTIRE 训练（推荐）：
+
+```bash
+python scripts/train_ntire.py --data-root ./NTIRE-RobustAIGenDetection-train --save-dir ./checkpoints_ntire
+```
+
+**NTIRE 训练流程**:
+
+1. 加载 NTIRE-RobustAIGenDetection-train 数据集
+2. 初始化多分支架构（CLIP ViT + Frequency + Noise）
+3. 执行训练循环：Forward -> Loss (BCE + Focal) -> Backward -> Optimizer
+4. 每个 Epoch 更新 EMA 模型并在验证集上评估
+5. 保存最佳模型和最新检查点
+
+更多 NTIRE 训练细节请参考 [docs/NTIRE\_2026\_FINAL\_PIPELINE.md](docs/NTIRE_2026_FINAL_PIPELINE.md)。
+
+***
+
+## 9️⃣ Evaluation
+
+### 9.1 通用评估
+
+使用 `scripts/evaluate.py` 进行评估：
+
+```bash
+python scripts/evaluate.py --config configs/eval/default.yml --checkpoint checkpoints/best.pth
+```
+
+### 9.2 NTIRE 评估
+
+使用 `scripts/evaluate_ntire.py` 进行 NTIRE 评估：
+
+```bash
+python scripts/evaluate_ntire.py --data-root ./NTIRE-RobustAIGenDetection-train --checkpoint checkpoints_ntire/best.pth
+```
+
+**输出指标**:
+
+- **AUROC**: ROC 曲线下面积
+- **AUPRC**: PR 曲线下面积
+- **F1-score**: 精确率和召回率的调和平均数
+- **Precision / Recall**: 精确率和召回率
+- **ECE**: 期望校准误差
+
+***
+
+## 🔟 Inference
+
+### 10.1 通用命令行推理
+
+对单张图像进行快速检测：
+
+```bash
+python scripts/infer.py --image example.jpg --model checkpoints/best.pth
+```
+
+### 10.2 NTIRE 推理
+
+使用 `scripts/infer_ntire.py` 进行 NTIRE 推理：
+
+```bash
+python scripts/infer_ntire.py --checkpoint checkpoints_ntire/best.pth --image example.jpg
+```
+
+支持多尺度推理和 TTA：
+
+```bash
+python scripts/infer_ntire.py --checkpoint checkpoints_ntire/best.pth --folder ./eval_images --scales 224 336 --tta-flip
+```
+
+***
+
+## 1️⃣1️⃣ NTIRE Pipeline
+
+NTIRE 2026 Robust AIGC Detection 是项目的正式支持部分，提供完整的训练、评估和推理流程。
+
+### 11.1 NTIRE 训练
+
+```bash
+python scripts/train_ntire.py --data-root ./NTIRE-RobustAIGenDetection-train --save-dir ./checkpoints_ntire --epochs 20 --batch-size 24
+```
+
+### 11.2 NTIRE 评估
+
+```bash
+python scripts/evaluate_ntire.py --data-root ./NTIRE-RobustAIGenDetection-train --checkpoint checkpoints_ntire/best.pth
+```
+
+### 11.3 NTIRE 推理
+
+```bash
+python scripts/infer_ntire.py --checkpoint checkpoints_ntire/best.pth --image example.jpg
+```
+
+完整的 NTIRE 文档请参考 [docs/NTIRE\_2026\_FINAL\_PIPELINE.md](docs/NTIRE_2026_FINAL_PIPELINE.md)。
+
+***
+
+## 1️⃣2️⃣ API Service
+
+启动后端 API 服务以支持 Web 界面或远程调用：
+
+```bash
+python scripts/start_backend.py
+```
+
+服务默认运行在 `http://localhost:8000`。
+
+***
+
+## 1️⃣3️⃣ Frontend
+
+启动 React 前端开发服务器：
+
+```bash
+cd frontend
+npm run dev
+```
+
+构建生产版本：
+
+```bash
+cd frontend
+npm run build
+```
+
+***
+
+## 1️⃣4️⃣ GradCAM
+
+测试 GradCAM 可解释性功能：
+
+```bash
+python scripts/tools/test_gradcam.py --image example.jpg --model checkpoints/best.pth
+```
+
+输出将保存到 `outputs/gradcam_outputs/` 目录。
+
+***
+
+## 1️⃣5️⃣ Explainability
+
+本项目特别强调可解释性，提供多种分析工具：
+
+- **Grad-CAM**: 生成类激活热力图，高亮显示模型认为"伪造"的图像区域
+- **Branch Contribution**: 量化 RGB、频域和噪声三个分支对最终决策的贡献比例
+- **Spectrum Analysis**: 可视化图像的频域分布
+- **Noise Residuals**: 展示经过 SRM 滤波后的噪声残差图
+
+***
+
+## 1️⃣6️⃣ Configuration
+
+项目使用 YAML 文件进行配置管理。配置文件位于 `configs/` 目录下。
+
+主要配置文件：
+
+- `configs/train/default.yml`: 训练配置
+- `configs/eval/default.yml`: 评估配置
+- `configs/infer/default.yml`: 推理配置
+- `configs/deploy/default.yml`: 部署配置
+
+***
+
+## 1️⃣7️⃣ Development Notes
+
+- `src/ai_image_detector/`: 核心代码目录
+- `scripts/`: 命令行入口脚本
+- `configs/`: 配置文件目录
+- `frontend/`: React Web UI
+- `docs/`: 项目文档
+

@@ -1,0 +1,8 @@
+# Inference configuration
+
+infer:
+  model_path: checkpoints/best.pth
+  device: cuda
+  image_size: 224
+  enable_debug: false
+

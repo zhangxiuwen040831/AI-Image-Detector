@@ -8,7 +8,7 @@ const BranchContribution = ({ scores, language = 'zh' }) => {
   const noise = typeof scores?.noise === 'number' ? scores.noise : 0;
   const frequency = typeof scores?.frequency === 'number' ? scores.frequency : 0;
   const data = useMemo(() => [
-    { name: 'RGB', score: rgb * 100 },
+    { name: language === 'zh' ? '语义' : 'Semantic', score: rgb * 100 },
     { name: language === 'zh' ? '噪声' : 'Noise', score: noise * 100 },
     { name: language === 'zh' ? '频域' : 'Frequency', score: frequency * 100 },
   ], [rgb, noise, frequency, language]);
@@ -59,7 +59,7 @@ const BranchContribution = ({ scores, language = 'zh' }) => {
       </div>
       
       <p className="text-xs text-gray-400 text-center mt-3 leading-relaxed">
-        {language === 'zh' ? '该图展示三个分支对最终判定的影响占比，用于识别本次推理的关键证据来源。' : 'This chart shows the impact ratio of the three branches on the final decision, used to identify the key evidence sources for this inference.'}
+        {language === 'zh' ? '该图展示语义、噪声与频域分支对最终融合判定的相对贡献，用于定位本次推理的关键证据来源。' : 'This chart shows the relative contributions of the semantic, noise, and frequency branches to the fused decision, helping identify key evidence sources for this inference.'}
       </p>
     </motion.div>
   );

@@ -1,0 +1,7 @@
+# Evaluation configuration
+
+eval:
+  batch_size: 32
+  metric_threshold: 0.5
+  output_dir: outputs/evaluation
+

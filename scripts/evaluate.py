@@ -7,13 +7,16 @@ import torch
 from torch.utils.data import DataLoader
 
 ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT / "src"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
-from src.data import ImageDataset, build_val_transforms
-from src.models import MultiBranchDetector
-from src.training.metrics import compute_metrics
-from src.utils import load_config, setup_logger
+from ai_image_detector.data import ImageDataset, build_val_transforms
+from ai_image_detector.models import MultiBranchDetector
+from ai_image_detector.evaluation.metrics import compute_binary_metrics as compute_metrics
+from ai_image_detector.utils import load_config, setup_logger
 
 
 def build_device(device_name: str) -> torch.device:

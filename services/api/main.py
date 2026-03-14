@@ -47,15 +47,15 @@ app.add_middleware(
 
 # Initialize detector
 try:
-    # Try to load model path from config
+    project_root = Path(__file__).resolve().parents[2]
     cfg = load_config("infer")
-    model_path_from_config = cfg.get("model_path", "")
+    model_path_from_config = cfg.get("model_path") or cfg.get("infer", {}).get("model_path", "")
     if model_path_from_config:
-        MODEL_PATH = model_path_from_config
+        configured_path = Path(model_path_from_config)
+        if not configured_path.is_absolute():
+            configured_path = project_root / configured_path
+        MODEL_PATH = str(configured_path)
     else:
-        # Use robust path based on project root
-        project_root = Path(__file__).resolve().parents[2]
-        # Try multiple common locations
         possible_paths = [
             BEST_MODEL_PATH,
             project_root / "model" / "best.pth",
@@ -70,11 +70,9 @@ try:
                 break
         
         if not MODEL_PATH:
-            # Default fallback
             MODEL_PATH = str(BEST_MODEL_PATH)
 except Exception as e:
     logger.warning("config_load_failed using_default_path error=%s", e)
-    # Default path as fallback
     MODEL_PATH = str(BEST_MODEL_PATH)
 
 logger.info("using_model_path path=%s", MODEL_PATH)
@@ -85,7 +83,13 @@ if not os.path.exists(MODEL_PATH):
 else:
     try:
         detector = ForensicDetector(MODEL_PATH, enable_debug=ENABLE_GRADCAM_DEBUG)
-        logger.info("detector_initialized device=%s debug=%s", detector.device, ENABLE_GRADCAM_DEBUG)
+        logger.info(
+            "detector_initialized device=%s debug=%s model_family=%s model_class=%s",
+            detector.device,
+            ENABLE_GRADCAM_DEBUG,
+            getattr(detector, "model_family", "unknown"),
+            detector.model.__class__.__name__,
+        )
     except Exception as e:
         logger.exception("detector_init_failed error=%s", e)
         detector = None
@@ -102,6 +106,7 @@ class DetectionResponse(BaseModel):
     branch_scores: Optional[Dict[str, Optional[float]]] = None
     srm_image: Optional[str] = None
     spectrum_image: Optional[str] = None
+    fusion_evidence_image: Optional[str] = None
     debug: Optional[Dict[str, Any]] = None
 
 
@@ -141,20 +146,20 @@ def generate_explanation_report(result):
     # 取证分析
     forensic_analysis = {
         "rgb_analysis": {
-            "title": "RGB语义分析",
-            "description": f"RGB分支贡献约为{branch_contribution.get('rgb', 0):.2f}，为辅助证据来源。该分支主要从语义结构与纹理一致性角度提供证据。"
+            "title": "全局语义分析",
+            "description": f"全局语义分支贡献约为{branch_contribution.get('rgb', 0):.2f}，用于提供图像内容与高层语义一致性证据。该分支对应 NTIRE HybridAIGCDetector 的 semantic_branch（ViT/CLIP 风格语义编码 + semantic_head），关注对象结构、语义布局与跨区域一致性线索。"
         },
         "noise_analysis": {
-            "title": "噪声残差分析",
-            "description": f"噪声分支贡献约为{branch_contribution.get('noise', 0):.2f}，是本次判定的主要依据。该分支主要从残差与噪声一致性角度提供证据，其方向与最终结果（{prediction}）保持一致。"
+            "title": "噪声伪迹分析",
+            "description": f"噪声分支贡献约为{branch_contribution.get('noise', 0):.2f}，用于提供噪声统计与残差一致性证据。该分支对应 noise_branch + noise_head，重点捕捉合成管线可能引入的残差模式、去噪痕迹与局部噪声不一致，其证据方向与最终结果（{prediction}）一致。"
         },
         "frequency_analysis": {
-            "title": "频域分析",
-            "description": f"频域分支贡献约为{branch_contribution.get('frequency', 0):.2f}。该分支主要从频域分布与谱结构角度提供证据。"
+            "title": "频域伪迹分析",
+            "description": f"频域分支贡献约为{branch_contribution.get('frequency', 0):.2f}，用于提供频域分布与谱结构证据。该分支对应 frequency_branch + frequency_head，主要关注压缩、上采样与生成器纹理可能带来的谱异常与周期性模式。"
         },
         "cross_branch_conclusion": {
-            "title": "跨分支结论",
-            "description": "分支贡献存在明显主次差异，模型主要依赖高贡献分支完成{prediction}判定，其余分支提供辅助支持。"
+            "title": "多模态融合决策",
+            "description": f"模型通过 fusion 模块对语义/频域/噪声三路证据进行门控融合，并由 classifier 输出最终判定。当前分支贡献存在主次差异，融合层对高贡献分支赋予更高权重以完成 {prediction} 判定，其余分支提供一致性校验与辅助支持。"
         }
     }
     
@@ -171,8 +176,8 @@ def generate_explanation_report(result):
             "available": True
         },
         {
-            "title": "注意力热力图",
-            "description": "已提供注意力热图，可用于定位模型重点关注的判别区域。",
+            "title": "融合证据三角图",
+            "description": "已提供融合证据三角图，用于展示语义、频域、噪声三路证据在融合决策中的相对权重。",
             "available": True
         }
     ]
@@ -198,7 +203,7 @@ def generate_explanation_report(result):
     }
     
     explanation = {
-        "report_title": "AI图像取证报告",
+        "report_title": "NTIRE模型取证报告",
         "prediction": prediction,
         "confidence": confidence,
         "summary": summary,
@@ -250,6 +255,7 @@ async def _run_detection(file: UploadFile, debug_enabled: bool) -> Dict[str, Any
         model_artifacts = model_result.get("artifacts") or {}
         grad_cam_b64 = model_artifacts.get("grad_cam")
         grad_cam_overlay_b64 = model_artifacts.get("grad_cam_overlay")
+        fusion_evidence_b64 = model_artifacts.get("fusion_evidence")
 
         noise_residual_b64 = None
         frequency_spectrum_b64 = None
@@ -312,6 +318,7 @@ async def _run_detection(file: UploadFile, debug_enabled: bool) -> Dict[str, Any
                 "frequency_spectrum": frequency_spectrum_b64,
                 "grad_cam": grad_cam_b64,
                 "grad_cam_overlay": grad_cam_overlay_b64,
+                "fusion_evidence": fusion_evidence_b64,
             },
             "metadata": {
                 "enabled_branches": enabled_branches,
@@ -350,6 +357,7 @@ async def _run_detection(file: UploadFile, debug_enabled: bool) -> Dict[str, Any
             "branch_scores": inference_result["branch_contribution"],
             "srm_image": inference_result["artifacts"]["noise_residual"],
             "spectrum_image": inference_result["artifacts"]["frequency_spectrum"],
+            "fusion_evidence_image": inference_result["artifacts"]["fusion_evidence"],
             "debug": debug_payload if (debug_enabled or not grad_cam_b64 or not grad_cam_overlay_b64) else None,
         }
         return response

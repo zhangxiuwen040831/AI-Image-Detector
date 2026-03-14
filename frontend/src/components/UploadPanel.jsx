@@ -21,11 +21,11 @@ const UploadPanel = ({ onUpload, isAnalyzing, language = 'zh' }) => {
 
   const validateFile = (file) => {
     if (!file.type.startsWith('image/')) {
-      setError('Only image files are allowed');
+      setError(language === 'zh' ? '仅允许上传图像文件' : 'Only image files are allowed');
       return false;
     }
     if (file.size > 10 * 1024 * 1024) {
-      setError('File size must be less than 10MB');
+      setError(language === 'zh' ? '文件大小必须小于10MB' : 'File size must be less than 10MB');
       return false;
     }
     return true;
@@ -206,7 +206,7 @@ const UploadPanel = ({ onUpload, isAnalyzing, language = 'zh' }) => {
                     transition={{ duration: 0.3 }}
                     className="text-sm text-gray-400 mb-6 min-h-[40px]"
                   >
-                    {language === 'zh' ? '系统将分析RGB、噪声残差和频谱特征。' : 'The system will analyze RGB, noise residuals, and spectral features.'}
+                    {language === 'zh' ? '系统将分析全局语义、噪声伪迹与频域伪迹特征，并进行融合判定。' : 'The system will analyze global semantics, noise artifacts, and frequency artifacts, then fuse them for the final decision.'}
                   </motion.p>
                 </AnimatePresence>
                 

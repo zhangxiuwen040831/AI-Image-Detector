@@ -14,7 +14,7 @@ const BranchContribution = lazy(() => import('./components/BranchContribution'))
 const NoiseResidualViewer = lazy(() => import('./components/NoiseResidualViewer'));
 const FrequencySpectrum = lazy(() => import('./components/FrequencySpectrum'));
 const ExplanationReport = lazy(() => import('./components/ExplanationReport'));
-const AttentionHeatmap = lazy(() => import('./components/AttentionHeatmap'));
+const FusionEvidenceTriangle = lazy(() => import('./components/FusionEvidenceTriangle'));
 
 const API_URL = (import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '')).trim();
 const API_BASE = API_URL ? API_URL.replace(/\/$/, '') : '';
@@ -65,8 +65,7 @@ function App() {
       console.log('[Detect] endpoint:', DETECT_ENDPOINT);
       console.log('[Detect] result:', data);
       console.log('[Detect] artifacts:', data?.artifacts);
-      console.log('[Detect] grad_cam length:', data?.artifacts?.grad_cam ? String(data.artifacts.grad_cam).length : 0);
-      console.log('[Detect] grad_cam_overlay length:', data?.artifacts?.grad_cam_overlay ? String(data.artifacts.grad_cam_overlay).length : 0);
+      console.log('[Detect] fusion_evidence length:', data?.artifacts?.fusion_evidence ? String(data.artifacts.fusion_evidence).length : 0);
       setResult(data);
     } catch (err) {
       setError(err.message);
@@ -108,7 +107,7 @@ function App() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                中CN
+                中文
               </motion.button>
               <span className="text-gray-600">/</span>
               <motion.button 
@@ -117,7 +116,7 @@ function App() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                英EN
+                English
               </motion.button>
             </div>
             <a href="#" onClick={(e) => { e.preventDefault(); setShowDocumentation(!showDocumentation); }} className="text-sm text-gray-400 hover:text-white transition-colors">{language === 'zh' ? '文档与架构' : 'Documentation'}</a>
@@ -150,7 +149,7 @@ function App() {
                   transition={{ duration: 0.3 }}
                   className="text-gray-400 max-w-2xl mx-auto text-lg min-h-[72px] flex items-center justify-center"
                 >
-                  {language === 'zh' ? '基于多分支神经网络的AIGC图像检测系统。实时检测频谱伪影和噪声残差。' : 'AIGC image detection system based on multi-branch neural network. Real-time detection of spectral artifacts and noise residuals.'}
+                  {language === 'zh' ? '基于 NTIRE HybridAIGCDetector 的AIGC图像检测系统：全局语义 / 频域伪迹 / 噪声伪迹三路证据融合，输出最终判定。' : 'AIGC image detection system powered by the NTIRE HybridAIGCDetector: fused evidence from global semantics, frequency artifacts, and noise artifacts for the final decision.'}
                 </motion.p>
               </AnimatePresence>
             </div>
@@ -188,9 +187,9 @@ function App() {
                         <FrequencySpectrum imageBase64={result.artifacts?.frequency_spectrum || result.spectrum_image} language={language} />
                       </Suspense>
                       <Suspense fallback={<div className="glass-card h-64 animate-pulse" />}>
-                        <AttentionHeatmap
-                          gradCamBase64={result.artifacts?.grad_cam}
-                          gradCamOverlayBase64={result.artifacts?.grad_cam_overlay}
+                        <FusionEvidenceTriangle
+                          imageBase64={result.artifacts?.fusion_evidence || result.fusion_evidence_image}
+                          branchContribution={result.branch_contribution || result.branch_scores}
                           language={language}
                         />
                       </Suspense>
@@ -221,7 +220,7 @@ function App() {
                           transition={{ duration: 0.3 }}
                           className="text-xs text-gray-400 leading-relaxed font-mono min-h-[60px]"
                         >
-                          {language === 'zh' ? '模型权重 (best.pth) 针对 ResNet18 多分支架构优化。使用 FFT 和 SRM 滤波器进行高频带伪影检测。准确率：87.31%。' : 'Model weights (best.pth) optimized for ResNet18 multi-branch architecture. Uses FFT and SRM filters for high-frequency band artifact detection. Accuracy: 87.31%.'}
+                          {language === 'zh' ? '模型权重 (best.pth) 对应 NTIRE HybridAIGCDetector：全局语义分支（ViT/CLIP 风格）、频域伪迹分支、噪声伪迹分支，经 fusion 门控融合与 classifier 输出最终结果。' : 'Model weights (best.pth) correspond to the NTIRE HybridAIGCDetector: a ViT/CLIP-style global semantic branch, a frequency artifact branch, and a noise artifact branch, fused via gated fusion and classified for the final output.'}
                         </motion.p>
                       </AnimatePresence>
                     </div>

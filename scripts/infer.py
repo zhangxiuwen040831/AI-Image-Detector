@@ -6,8 +6,11 @@ import torch
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT / "src"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from ai_image_detector.inference.detector import ForensicDetector
 from ai_image_detector.utils import RESNET18_WEIGHTS_PATH

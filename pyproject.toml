@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-image-detector"
+version = "1.0.0"
+description = "AI Image Detector - Multi-branch forensic analysis system"
+requires-python = ">=3.8"
+authors = [
+    { name = "Project Contributors" }
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

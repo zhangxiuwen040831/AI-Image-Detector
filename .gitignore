@@ -55,3 +55,17 @@ checkpoints/
 # Environment variables
 .env
 .env.local
+node_modules
+
+# Build artifacts
+dist/
+frontend/dist/
+
+# Artifacts directory
+artifacts/
+
+# Outputs directory
+outputs/
+
+# Large dataset index file (exceeds GitHub size limit)
+configs/dataset_index.json

@@ -1,0 +1,49 @@
+{
+  "upload": {
+    "remote_package": "/root/ai-image-detector-code.tar.gz"
+  },
+  "setup": {
+    "apt-get update -y": {
+      "code": 0
+    },
+    "DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip": {
+      "code": 0
+    },
+    "mkdir -p /root/ai-image-detector": {
+      "code": 0
+    },
+    "tar -xzf /root/ai-image-detector-code.tar.gz -C /root/ai-image-detector": {
+      "code": 0
+    },
+    "python3 -m venv /root/venvs/aigc-detector": {
+      "code": 0
+    },
+    "source /root/venvs/aigc-detector/bin/activate && python -m pip install --upgrade pip setuptools wheel": {
+      "code": 0
+    },
+    "source /root/venvs/aigc-detector/bin/activate && pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118": {
+      "code": 0
+    },
+    "source /root/venvs/aigc-detector/bin/activate && pip install -r /root/ai-image-detector/requirements.txt": {
+      "code": 0
+    },
+    "status": "ok"
+  },
+  "verify": {
+    "python_version": {
+      "code": 0,
+      "stdout": "Python 3.12.3",
+      "stderr": ""
+    },
+    "nvidia_smi": {
+      "code": 0,
+      "stdout": "NVIDIA GeForce RTX 5090, 580.95.05, 32607 MiB",
+      "stderr": ""
+    },
+    "torch_cuda": {
+      "code": 0,
+      "stdout": "2.7.1+cu118\nTrue\n11.8",
+      "stderr": ""
+    }
+  }
+}

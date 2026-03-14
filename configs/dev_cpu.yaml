@@ -1,0 +1,34 @@
+project_name: "aigc_detector"
+experiment_name: "cpu_debug"
+
+system:
+  device: "cpu"
+  num_workers: 0
+  pin_memory: false
+  seed: 42
+
+data:
+  train_dir: "./data/sample/train"
+  val_dir: "./data/sample/val"
+  image_size: 224
+  batch_size: 2
+
+model:
+  backbone: "resnet18"
+  rgb_pretrained: false
+  noise_pretrained: false
+  freq_pretrained: false
+  fused_dim: 256
+  classifier_hidden_dim: 128
+  dropout: 0.2
+
+training:
+  epochs: 1
+  lr: 0.001
+  weight_decay: 0.0001
+  use_amp: false
+
+logging:
+  use_tensorboard: false
+  log_dir: "./logs/debug"
+  save_dir: "./checkpoints/debug"

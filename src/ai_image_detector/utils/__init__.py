@@ -15,6 +15,7 @@ from .paths import (
 )
 
 from .config import load_config, get_config
+from .logger import setup_logger
 
 __all__ = [
     "PROJECT_ROOT",
@@ -31,5 +32,6 @@ __all__ = [
     "BEST_MODEL_PATH",
     "RESNET18_WEIGHTS_PATH",
     "load_config",
-    "get_config"
+    "get_config",
+    "setup_logger"
 ]
