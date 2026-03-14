@@ -18,9 +18,26 @@ AI Image Detector 是一个先进的 AI 生成图像取证分析系统，专为 
 
 ## 2️⃣ Screenshots
 
+以下是 AI Image Detector 系统的界面截图，展示了完整的用户交互流程：
+
+### 登录界面
+用户登录入口，支持身份验证和系统访问控制：
+
 ![Login Screen](docs/assets/login_screen.png)
+
+### 主界面
+系统核心操作界面，提供图像上传、检测触发和结果概览功能：
+
 ![Main Interface](docs/assets/main_interface.png)
+
+### 分析面板
+详细的检测结果可视化界面，展示概率分布、分支贡献度和可解释性分析：
+
 ![Analysis Panel](docs/assets/analysis_panel.png)
+
+### 文档介绍
+项目架构和技术文档说明页面，帮助用户理解系统工作原理：
+
 ![Documentation Intro](docs/assets/documentation_intro.png)
 
 ***
@@ -340,23 +357,23 @@ python scripts/infer_ntire.py --checkpoint checkpoints_ntire/best.pth --folder .
 
 ***
 
-## 1️⃣1️⃣ NTIRE Pipeline
+## 1️⃣2️⃣ NTIRE Pipeline
 
 NTIRE 2026 Robust AIGC Detection 是项目的正式支持部分，提供完整的训练、评估和推理流程。
 
-### 11.1 NTIRE 训练
+### 12.1 NTIRE 训练
 
 ```bash
 python scripts/train_ntire.py --data-root ./NTIRE-RobustAIGenDetection-train --save-dir ./checkpoints_ntire --epochs 20 --batch-size 24
 ```
 
-### 11.2 NTIRE 评估
+### 12.2 NTIRE 评估
 
 ```bash
 python scripts/evaluate_ntire.py --data-root ./NTIRE-RobustAIGenDetection-train --checkpoint checkpoints_ntire/best.pth
 ```
 
-### 11.3 NTIRE 推理
+### 12.3 NTIRE 推理
 
 ```bash
 python scripts/infer_ntire.py --checkpoint checkpoints_ntire/best.pth --image example.jpg
