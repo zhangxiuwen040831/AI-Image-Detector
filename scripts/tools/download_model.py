@@ -4,7 +4,7 @@ import hashlib
 import os
 
 MODEL_NAME = "facebook/convnextv2-base-22k-384"
-SAVE_DIR = "/root/autodl-tmp/ai-image-detector/models/convnextv2-base"
+SAVE_DIR = "/root/lanyun-tmp/ai-image-detector/models/convnextv2-base"
 
 def download_and_verify():
     print(f"Downloading model {MODEL_NAME}...")

@@ -33,8 +33,16 @@ TESTS_DIR = PROJECT_ROOT / "tests"
 # 预训练权重路径
 PRETRAINED_DIR = CHECKPOINT_DIR / "pretrained"
 
-# 最佳模型路径
+# 最佳模型路径 - 唯一模型入口
 BEST_MODEL_PATH = CHECKPOINT_DIR / "best.pth"
 
 # ResNet18预训练权重路径
 RESNET18_WEIGHTS_PATH = PRETRAINED_DIR / "resnet18.safetensors"
+
+
+def get_model_path() -> str:
+    """
+    获取模型文件路径
+    单模型文件模式：只返回 checkpoints/best.pth
+    """
+    return str(BEST_MODEL_PATH)

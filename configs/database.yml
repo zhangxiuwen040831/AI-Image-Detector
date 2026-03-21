@@ -1,15 +1,15 @@
 database:
   host: localhost
   port: 3306
-  username: root
-  password: 123456
+  username: your-db-user
+  password: change-me-before-deploy
   database: ai_image_detector
   charset: utf8mb4
   pool_size: 5
   max_overflow: 10
 
 session:
-  secret_key: your-secret-key-change-this-in-production
+  secret_key: replace-with-a-long-random-secret
   token_expiry_hours: 24
   cookie_name: ai_detector_session
 

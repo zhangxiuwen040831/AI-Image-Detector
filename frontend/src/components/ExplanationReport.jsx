@@ -129,7 +129,6 @@ const translateContent = (text, language) => {
     '当前风险等级为中': 'Current risk level is medium',
     '是本次判定的重要依据': 'is an important basis for this judgment',
     '其方向与最终结果（AIGC）保持一致': 'Its direction is consistent with the final result (AIGC)',
-    '模型主要依赖高贡献分支完成AIGC判定': 'The model mainly relies on high-contribution branches to complete AIGC judgment',
     '最终预测为AIGC': 'Final prediction is AIGC',
     '系统将该图像判定为AIGC': 'the system judges this image as AIGC',
     '当前无可展示摘要。': 'No summary available.',

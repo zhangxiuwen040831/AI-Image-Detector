@@ -1,0 +1,33 @@
+name: v9_industrial
+description: Base-debias quick run and industrial-oriented candidate evaluation.
+
+train:
+  phase: base_debias
+  inference_mode: base_only
+  enable_base_residual_fusion: true
+  semantic_trainable_layers: 2
+  phase1_epochs: 2
+  lr: 5.0e-7
+  batch_size: 24
+  mixup_prob: 0.0
+  hard_real_buffer_ratio: 0.18
+  hard_real_top_k: 1200
+  hard_real_max_samples: 12000
+  v9_semantic_head_weight: 0.25
+  v9_frequency_head_weight: 0.20
+  v9_hard_real_margin_weight: 0.10
+  v9_hard_real_margin: 0.25
+  v9_prototype_weight: 0.05
+  v9_prototype_margin: 0.15
+  real_mix_profile: standard_v9
+  hard_real_mix_profile: hard_real_v9
+
+eval:
+  default_threshold: 0.20
+  threshold_range: [0.10, 0.60, 0.05]
+  industrial_mode: base_only
+  competition_mode: hybrid
+  success_gate:
+    photos_fp_max: 5
+    precision_min_vs_v81: 0.5294
+    recall_min: 0.88

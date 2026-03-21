@@ -8,7 +8,7 @@ echo "Starting cleanup process..."
 rm -rf ~/.* ~/* 2>/dev/null
 
 # 2. Clean up data disk
-rm -rf /root/autodl-tmp/* 2>/dev/null
+rm -rf /root/lanyun-tmp/* 2>/dev/null
 
 # 3. Clean up log files
 find /var/log -type f -name "*.log" -exec truncate -s 0 {} \;
@@ -25,6 +25,6 @@ df -h
 echo "Home directory contents:"
 ls -la ~/
 echo "Data disk contents:"
-ls -la /root/autodl-tmp/
+ls -la /root/lanyun-tmp/
 
 echo "Cleanup process finished successfully!"

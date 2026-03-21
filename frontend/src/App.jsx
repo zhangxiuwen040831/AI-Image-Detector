@@ -27,6 +27,8 @@ function App() {
   const [showDocumentation, setShowDocumentation] = useState(false);
   const [language, setLanguage] = useState('zh'); // zh for Chinese, en for English
   const [showIntro, setShowIntro] = useState(true);
+  const branchVisualization = result?.branch_evidence || result?.branch_scores || result?.branch_contribution;
+  const triangleVisualization = result?.branch_triangle || branchVisualization;
 
   const handleUpload = useCallback(async (file, preview) => {
     if (!file) {
@@ -149,7 +151,7 @@ function App() {
                   transition={{ duration: 0.3 }}
                   className="text-gray-400 max-w-2xl mx-auto text-lg min-h-[72px] flex items-center justify-center"
                 >
-                  {language === 'zh' ? '基于 NTIRE HybridAIGCDetector 的AIGC图像检测系统：全局语义 / 频域伪迹 / 噪声伪迹三路证据融合，输出最终判定。' : 'AIGC image detection system powered by the NTIRE HybridAIGCDetector: fused evidence from global semantics, frequency artifacts, and noise artifacts for the final decision.'}
+                  {language === 'zh' ? '基于 V10 最终 base_only 模型的 AIGC 图像检测系统：以语义与频域为主判别路径，噪声证据仅保留为辅助诊断。' : 'AIGC image detection system powered by the final V10 base-only model: semantic and frequency evidence form the primary decision path, while noise evidence remains diagnostic only.'}
                 </motion.p>
               </AnimatePresence>
             </div>
@@ -174,7 +176,12 @@ function App() {
                       </div>
                       <div className="min-w-0">
                         <Suspense fallback={<div className="glass-card h-64 animate-pulse" />}>
-                          <BranchContribution scores={result.branch_contribution || result.branch_scores} language={language} />
+                          <BranchContribution
+                            scores={branchVisualization}
+                            analysisMode={result.branch_analysis_mode}
+                            mode={result.mode}
+                            language={language}
+                          />
                         </Suspense>
                       </div>
                     </div>
@@ -189,7 +196,9 @@ function App() {
                       <Suspense fallback={<div className="glass-card h-64 animate-pulse" />}>
                         <FusionEvidenceTriangle
                           imageBase64={result.artifacts?.fusion_evidence || result.fusion_evidence_image}
-                          branchContribution={result.branch_contribution || result.branch_scores}
+                          branchContribution={triangleVisualization}
+                          analysisMode={result.branch_analysis_mode}
+                          mode={result.mode}
                           language={language}
                         />
                       </Suspense>
@@ -220,7 +229,7 @@ function App() {
                           transition={{ duration: 0.3 }}
                           className="text-xs text-gray-400 leading-relaxed font-mono min-h-[60px]"
                         >
-                          {language === 'zh' ? '模型权重 (best.pth) 对应 NTIRE HybridAIGCDetector：全局语义分支（ViT/CLIP 风格）、频域伪迹分支、噪声伪迹分支，经 fusion 门控融合与 classifier 输出最终结果。' : 'Model weights (best.pth) correspond to the NTIRE HybridAIGCDetector: a ViT/CLIP-style global semantic branch, a frequency artifact branch, and a noise artifact branch, fused via gated fusion and classified for the final output.'}
+                          {language === 'zh' ? '当前交付的 best.pth 对应 V10 最终模型，默认推理模式为 base_only：semantic + frequency 负责最终判定。当前分支图默认展示的是样本级证据强度，而不是旧式纯 gate 权重，因此更能反映每张图的真实差异。' : 'The delivered best.pth corresponds to the final V10 model with base_only as the default inference mode: semantic + frequency drive the final decision. The branch visuals now show sample-level evidence intensity rather than legacy gate weights, so they better reflect per-image differences.'}
                         </motion.p>
                       </AnimatePresence>
                     </div>

@@ -16,7 +16,7 @@ def run_checks():
         "/root/miniconda3/bin/python -c 'import torch; print(\"Torch GPU:\", torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"No GPU\")'",
         "/root/miniconda3/bin/python -c 'import torch; print(\"Torch version:\", torch.__version__)'",
         "/root/miniconda3/bin/python -c 'import deepspeed; print(\"DeepSpeed version:\", deepspeed.__version__)'",
-        "ls -R /root/autodl-tmp/ai-image-detector | head -n 20"
+        "ls -R /root/lanyun-tmp/ai-image-detector | head -n 20"
     ]
     
     for cmd in commands:

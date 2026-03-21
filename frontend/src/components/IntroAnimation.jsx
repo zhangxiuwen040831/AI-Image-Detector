@@ -1,323 +1,172 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 
+const PARTICLE_LAYOUT = [
+  { left: '21%', top: '25%', size: 3, delay: 0.15, duration: 12 },
+  { left: '76%', top: '22%', size: 3, delay: 0.85, duration: 14 },
+  { left: '17%', top: '69%', size: 2, delay: 0.4, duration: 15 },
+  { left: '82%', top: '66%', size: 2, delay: 1.0, duration: 16 },
+];
+
 const IntroAnimation = ({ onComplete }) => {
-  const canvasRef = useRef(null);
-  const requestRef = useRef();
-  
-  // Animation configuration
-  const config = {
-    textLine1: "AI IMAGE",
-    textLine2: "DETECTOR",
-    particleCount: 2000,
-    particleSize: 1.5,
-    mouseRadius: 100,
-    forceMultiplier: 0.5,
-    returnSpeed: 0.08,
-    color: '255, 255, 255', // Base white
-    accentColor: '0, 255, 255', // Cyan accent
-  };
+  const [ready, setReady] = useState(false);
+  const particles = useMemo(() => PARTICLE_LAYOUT, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    let width = window.innerWidth;
-    let height = window.innerHeight;
-    
-    const handleResize = () => {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = width;
-      canvas.height = height;
-      initParticles();
-    };
-    
-    window.addEventListener('resize', handleResize);
-    canvas.width = width;
-    canvas.height = height;
-
-    let particles = [];
-    let animationPhase = 0; // 0: Intro (random), 1: Forming, 2: Hold (Waiting for click)
-    let frameCount = 0;
-
-    class Particle {
-      constructor(x, y) {
-        this.x = Math.random() * width;
-        this.y = Math.random() * height;
-        this.targetX = x;
-        this.targetY = y;
-        this.vx = (Math.random() - 0.5) * 2;
-        this.vy = (Math.random() - 0.5) * 2;
-        this.size = Math.random() * config.particleSize + 0.5;
-        this.color = Math.random() > 0.9 
-          ? `rgba(${config.accentColor}, ${Math.random() * 0.8 + 0.2})` 
-          : `rgba(${config.color}, ${Math.random() * 0.6 + 0.1})`;
-      }
-
-      update(mouse) {
-        // Phase 0: Chaotic movement
-        if (animationPhase === 0) {
-          this.x += this.vx * 2;
-          this.y += this.vy * 2;
-          
-          if (this.x < 0 || this.x > width) this.vx *= -1;
-          if (this.y < 0 || this.y > height) this.vy *= -1;
-        } 
-        // Phase 1 & 2: Form text
-        else {
-          let dx = this.targetX - this.x;
-          let dy = this.targetY - this.y;
-          let distance = Math.sqrt(dx * dx + dy * dy);
-          let forceDirectionX = dx / distance;
-          let forceDirectionY = dy / distance;
-          let force = distance * 0.05;
-
-          if (mouse.x) {
-            let dxMouse = mouse.x - this.x;
-            let dyMouse = mouse.y - this.y;
-            let distanceMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse);
-            if (distanceMouse < config.mouseRadius) {
-              const repelForce = (config.mouseRadius - distanceMouse) / config.mouseRadius;
-              const angle = Math.atan2(dyMouse, dxMouse);
-              this.x -= Math.cos(angle) * repelForce * 5;
-              this.y -= Math.sin(angle) * repelForce * 5;
-            }
-          }
-
-          if (distance < 1) {
-             this.x = this.targetX;
-             this.y = this.targetY;
-          } else {
-            this.vx = forceDirectionX * force * config.forceMultiplier;
-            this.vy = forceDirectionY * force * config.forceMultiplier;
-            this.x += this.vx;
-            this.y += this.vy;
-          }
-        }
-      }
-
-      draw() {
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    const initParticles = () => {
-      particles = [];
-      
-      const virtualCanvas = document.createElement('canvas');
-      const vCtx = virtualCanvas.getContext('2d');
-      virtualCanvas.width = width;
-      virtualCanvas.height = height;
-      
-      // Font settings
-      const fontSize = Math.min(width / 8, 120); // Smaller font to fit two lines
-      vCtx.font = `900 ${fontSize}px "Inter", sans-serif`;
-      vCtx.fillStyle = 'white';
-      vCtx.textAlign = 'center';
-      vCtx.textBaseline = 'middle';
-      
-      // Calculate spacing to match widths
-      const line1 = config.textLine1;
-      const line2 = config.textLine2;
-      
-      const width1 = vCtx.measureText(line1).width;
-      const width2 = vCtx.measureText(line2).width;
-      const maxWidth = Math.max(width1, width2);
-      
-      // Draw Line 1
-      // We manually space out the shorter line to match maxWidth
-      // Simple approach: adjust letter spacing via canvas (not supported directly in standard canvas API easily without manual positioning)
-      // Alternatively: Draw normally centered. The user asked for "guarantee equal width".
-      // Since we are sampling pixels, we can just draw them. 
-      // To force equal width, we can calculate a scale factor or tracking.
-      // Let's use a simpler approach: Draw them, and if one is shorter, increase spacing manually? 
-      // Or just center them. "Guaranteed equal width" usually implies justified text.
-      // Canvas `letterSpacing` is available in modern browsers but risky.
-      // Let's just draw them centered. "DETECTOR" and "AI IMAGE" are very close in width.
-      // Let's try to manually position characters? No, that's complex for this tool.
-      // Let's just rely on the font. If strict width is needed, I'd need to stretch the shorter one.
-      // Let's assume standard centering is close enough, or use tracking if supported.
-      
-      // Vertical positioning
-      const centerY = height / 2;
-      const lineHeight = fontSize * 1.2;
-      
-      // Draw Line 1 (AI IMAGE)
-      // To match width, we can use `letterSpacing` property of context if environment supports it.
-      // Or we can just draw.
-      
-      // Hack for "Equal Width":
-      // We will draw line 1 and line 2. 
-      // If we want them to align perfectly, let's use a monospaced font or accept slight difference?
-      // No, user said "Attention to letter spacing, guarantee two lines width consistent".
-      
-      // Let's try to implement a simple justification.
-      const drawJustified = (text, y, targetWidth) => {
-          if (!targetWidth) {
-              vCtx.fillText(text, width / 2, y);
-              return vCtx.measureText(text).width;
-          }
-          
-          const chars = text.split('');
-          const totalCharWidth = chars.reduce((acc, char) => acc + vCtx.measureText(char).width, 0);
-          const spaceAvailable = targetWidth - totalCharWidth;
-          const spacing = spaceAvailable / (chars.length - 1);
-          
-          let startX = (width - targetWidth) / 2;
-          
-          chars.forEach((char, i) => {
-              const charWidth = vCtx.measureText(char).width;
-              // Center the char in its slot? No, just left align + spacing
-              // Actually for 'AI IMAGE', the space is a character too.
-              // Let's simply change the letterSpacing property on the context string.
-              vCtx.fillText(char, startX + charWidth/2, y); // This is wrong.
-              startX += charWidth + spacing;
-          });
-      };
-      
-      // Standard drawing first to measure
-      const m1 = vCtx.measureText(line1).width;
-      const m2 = vCtx.measureText(line2).width;
-      const targetW = Math.max(m1, m2);
-      
-      // Draw Line 1
-      if (m1 < targetW) {
-          // Manually distribute
-          const chars = line1.split('');
-          const totalW = chars.reduce((sum, c) => sum + vCtx.measureText(c).width, 0);
-          const gap = (targetW - totalW) / (chars.length - 1);
-          let x = (width - targetW) / 2;
-          chars.forEach(c => {
-              vCtx.fillText(c, x + vCtx.measureText(c).width/2, centerY - lineHeight/2);
-              x += vCtx.measureText(c).width + gap;
-          });
-      } else {
-          vCtx.fillText(line1, width/2, centerY - lineHeight/2);
-      }
-      
-      // Draw Line 2
-      if (m2 < targetW) {
-           const chars = line2.split('');
-           const totalW = chars.reduce((sum, c) => sum + vCtx.measureText(c).width, 0);
-           const gap = (targetW - totalW) / (chars.length - 1);
-           let x = (width - targetW) / 2;
-           chars.forEach(c => {
-               vCtx.fillText(c, x + vCtx.measureText(c).width/2, centerY + lineHeight/2);
-               x += vCtx.measureText(c).width + gap;
-           });
-      } else {
-          vCtx.fillText(line2, width/2, centerY + lineHeight/2);
-      }
-
-      const imageData = vCtx.getImageData(0, 0, width, height).data;
-      
-      const step = 4; 
-      for (let y = 0; y < height; y += step) {
-        for (let x = 0; x < width; x += step) {
-          const index = (y * width + x) * 4;
-          if (imageData[index + 3] > 128) {
-            if (Math.random() > 0.5) {
-                particles.push(new Particle(x, y));
-            }
-          }
-        }
-      }
-      
-      // Extra background particles
-      while (particles.length < config.particleCount / 2) {
-          particles.push(new Particle(Math.random() * width, Math.random() * height));
-      }
-    };
-
-    let mouse = { x: null, y: null };
-    window.addEventListener('mousemove', (e) => {
-      mouse.x = e.x;
-      mouse.y = e.y;
-    });
-
-    initParticles();
-
-    const animate = () => {
-      frameCount++;
-      
-      // Clear with trail
-      ctx.fillStyle = `rgba(0, 0, 0, 0.2)`;
-      ctx.fillRect(0, 0, width, height);
-
-      // Phase Control
-      if (frameCount > 60 && animationPhase === 0) animationPhase = 1; // Start forming
-      if (frameCount > 200 && animationPhase === 1) animationPhase = 2; // Hold indefinitely
-      
-      // Draw particles
-      if (animationPhase === 1 || animationPhase === 2) {
-         // Connect particles near mouse
-         connectParticles();
-      }
-
-      particles.forEach(particle => {
-        particle.update(mouse);
-        particle.draw();
-      });
-
-      // Scanline
-      if (animationPhase === 2) {
-        const scanY = (frameCount * 5) % height;
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, scanY);
-        ctx.lineTo(width, scanY);
-        ctx.stroke();
-      }
-
-      requestRef.current = requestAnimationFrame(animate);
-    };
-
-    const connectParticles = () => {
-        if (!mouse.x) return;
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
-        ctx.lineWidth = 0.5;
-        for (let i = 0; i < particles.length; i++) {
-            const dx = particles[i].x - mouse.x;
-            const dy = particles[i].y - mouse.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < 150) {
-                ctx.beginPath();
-                ctx.moveTo(particles[i].x, particles[i].y);
-                ctx.lineTo(mouse.x, mouse.y);
-                ctx.stroke();
-            }
-        }
-    };
-
-    requestRef.current = requestAnimationFrame(animate);
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(requestRef.current);
-    };
+    const timer = window.setTimeout(() => setReady(true), 260);
+    return () => window.clearTimeout(timer);
   }, []);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 1 }}
-      exit={{ opacity: 0, scale: 1.1, filter: "blur(10px)" }}
-      transition={{ duration: 0.8 }}
-      className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center overflow-hidden cursor-pointer"
+      exit={{ opacity: 0, scale: 1.01, filter: 'blur(5px)' }}
+      transition={{ duration: 0.7, ease: 'easeOut' }}
+      className="fixed inset-0 z-[100] cursor-pointer overflow-hidden bg-[#050608]"
       onClick={onComplete}
     >
-      <canvas ref={canvasRef} className="block absolute inset-0" />
-      
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_41%,rgba(140,210,235,0.075),rgba(5,6,8,0)_32%),linear-gradient(180deg,#07090c_0%,#050608_52%,#040507_100%)]" />
+
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: [0, 1, 0] }}
-        transition={{ duration: 2, repeat: Infinity, delay: 3 }}
-        className="absolute bottom-20 text-white/50 text-sm font-mono tracking-[0.2em] pointer-events-none"
+        className="absolute inset-x-[16%] top-[18.5%] h-px bg-gradient-to-r from-transparent via-white/16 to-transparent"
+        initial={{ opacity: 0, scaleX: 0.72 }}
+        animate={{ opacity: ready ? 1 : 0, scaleX: ready ? 1 : 0.72 }}
+        transition={{ duration: 1.2, ease: 'easeOut' }}
+      />
+
+      <motion.div
+        className="absolute inset-x-[25%] bottom-[20.5%] h-px bg-gradient-to-r from-transparent via-cyan-200/14 to-transparent"
+        initial={{ opacity: 0, scaleX: 0.78 }}
+        animate={{ opacity: ready ? 1 : 0, scaleX: ready ? 1 : 0.78 }}
+        transition={{ duration: 1.25, ease: 'easeOut', delay: 0.1 }}
+      />
+
+      <motion.div
+        className="absolute left-1/2 top-[46%] h-[32rem] w-[32rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-200/5 blur-[128px]"
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{
+          opacity: ready ? [0.16, 0.24, 0.16] : 0,
+          scale: ready ? [1, 1.03, 1] : 0.92,
+        }}
+        transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      {particles.map((particle, index) => (
+        <motion.div
+          key={`${particle.left}-${particle.top}-${index}`}
+          className="absolute rounded-full bg-cyan-100/60"
+          style={{
+            left: particle.left,
+            top: particle.top,
+            width: particle.size,
+            height: particle.size,
+            boxShadow: '0 0 12px rgba(186, 230, 253, 0.18)',
+          }}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{
+            opacity: ready ? [0.04, 0.14, 0.04] : 0,
+            y: ready ? [0, -6, 0] : 0,
+            x: ready ? [0, 2, 0] : 0,
+            scale: ready ? [1, 1.12, 1] : 0.8,
+          }}
+          transition={{
+            duration: particle.duration,
+            repeat: Infinity,
+            ease: 'easeInOut',
+            delay: particle.delay,
+          }}
+        />
+      ))}
+
+      <div className="absolute inset-0 flex items-center justify-center px-8 pointer-events-none">
+        <div className="w-full max-w-6xl text-center">
+          <motion.p
+            initial={{ opacity: 0, y: 14, filter: 'blur(8px)' }}
+            animate={{ opacity: ready ? 0.52 : 0, y: ready ? 0 : 14, filter: ready ? 'blur(0px)' : 'blur(8px)' }}
+            transition={{ duration: 0.9, ease: 'easeOut' }}
+            className="mb-10 text-[10px] uppercase tracking-[0.46em] text-white/46 md:mb-12 md:text-xs"
+          >
+            Final Delivery
+          </motion.p>
+
+          <div className="relative inline-flex flex-col items-center">
+            <motion.h1
+              initial={{ opacity: 0, y: 24, filter: 'blur(14px)', letterSpacing: '0.42em' }}
+              animate={{
+                opacity: ready ? 0.96 : 0,
+                y: ready ? 0 : 24,
+                filter: ready ? 'blur(0px)' : 'blur(14px)',
+                letterSpacing: ready ? '0.24em' : '0.42em',
+              }}
+              transition={{ duration: 1.15, ease: 'easeOut' }}
+              className="text-[30px] font-light uppercase leading-none text-white md:text-[70px]"
+              style={{ fontFamily: '"Helvetica Neue", "SF Pro Display", "Segoe UI", Arial, sans-serif' }}
+            >
+              AI IMAGE
+            </motion.h1>
+
+            <motion.div
+              initial={{ opacity: 0, scaleX: 0.82 }}
+              animate={{ opacity: ready ? 0.72 : 0, scaleX: ready ? 1 : 0.82 }}
+              transition={{ duration: 1, ease: 'easeOut', delay: 0.12 }}
+              className="mx-auto my-5 h-px w-[min(32vw,248px)] bg-gradient-to-r from-transparent via-cyan-100/78 to-transparent md:my-6 md:w-[min(30vw,286px)]"
+            />
+
+            <motion.h2
+              initial={{ opacity: 0, y: 24, filter: 'blur(14px)', letterSpacing: '0.56em' }}
+              animate={{
+                opacity: ready ? 0.98 : 0,
+                y: ready ? 0 : 24,
+                filter: ready ? 'blur(0px)' : 'blur(14px)',
+                letterSpacing: ready ? '0.34em' : '0.56em',
+              }}
+              transition={{ duration: 1.18, ease: 'easeOut', delay: 0.08 }}
+              className="text-[36px] font-medium uppercase leading-none text-cyan-50 md:text-[84px]"
+              style={{ fontFamily: '"Helvetica Neue", "SF Pro Display", "Segoe UI", Arial, sans-serif' }}
+            >
+              DETECTOR
+            </motion.h2>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: ready ? 1 : 0 }}
+              transition={{ duration: 1.2, delay: 0.28 }}
+              className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] w-[min(44vw,420px)] -translate-x-1/2"
+              style={{
+                transformOrigin: 'top center',
+                transform: 'translateX(-50%) scaleY(-1)',
+                WebkitMaskImage: 'linear-gradient(to bottom, rgba(255,255,255,0.22), rgba(255,255,255,0.03) 46%, transparent 82%)',
+                maskImage: 'linear-gradient(to bottom, rgba(255,255,255,0.22), rgba(255,255,255,0.03) 46%, transparent 82%)',
+              }}
+            >
+              <div className="text-white/10 text-[24px] font-light uppercase leading-none tracking-[0.24em] md:text-[56px]">
+                AI IMAGE
+              </div>
+              <div className="mx-auto my-3 h-px w-[58%] bg-gradient-to-r from-transparent via-cyan-100/18 to-transparent md:my-4" />
+              <div className="text-cyan-50/10 text-[28px] font-medium uppercase leading-none tracking-[0.34em] md:text-[68px]">
+                DETECTOR
+              </div>
+            </motion.div>
+          </div>
+
+          <motion.p
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: ready ? 0.46 : 0, y: ready ? 0 : 12 }}
+            transition={{ duration: 0.95, ease: 'easeOut', delay: 0.28 }}
+            className="mt-10 text-[10px] uppercase tracking-[0.38em] text-slate-300/56 md:mt-14 md:text-xs"
+          >
+            Base-Only Industrial Candidate
+          </motion.p>
+        </div>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: ready ? [0.24, 0.72, 0.24] : 0, y: ready ? 0 : 12 }}
+        transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}
+        className="absolute bottom-14 left-1/2 -translate-x-1/2 rounded-full border border-white/10 bg-white/[0.035] px-5 py-2 text-[10px] uppercase tracking-[0.34em] text-white/48 backdrop-blur-md md:text-xs"
       >
-        [ CLICK TO ENTER ]
+        Click To Enter
       </motion.div>
     </motion.div>
   );

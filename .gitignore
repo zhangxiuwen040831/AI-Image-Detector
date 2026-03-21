@@ -1,71 +1,51 @@
-# Dataset directories
-NTIRE-RobustAIGenDetection-train/
-NTIRE-RobustAIGenDetection-val/
-NTIRE-RobustAIGenDetection-test/
-
-# Temporary files
-tmp_ntire_mock/
-tmp_tiny.csv
-*.tmp
-
-# Model weights
-*.pth
-*.pt
-*.onnx
-*.ckpt
-
-# Python cache
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-.Python
-*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
 
 # Virtual environments
+.venv/
 venv/
 env/
 ENV/
 
-# IDE
-.vscode/
+# Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# IDE / local tools
 .idea/
-*.swp
-*.swo
-*~
+.vscode/
+.trae/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
-
-# Legacy code (old version)
-legacy/
-
-# Checkpoints (large files)
-checkpoints/
-*.pth.tar
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Environment variables
-.env
-.env.local
-node_modules
-
-# Build artifacts
-dist/
-frontend/dist/
-
-# Artifacts directory
-artifacts/
-
-# Outputs directory
+# Generated artifacts
+tmp/
+tmp_ntire_mock/
+output/
 outputs/
+photos_test_outputs/
+*.log
 
-# Large dataset index file (exceeds GitHub size limit)
-configs/dataset_index.json
+# Large local data / archives
+NTIRE-RobustAIGenDetection-train/
+archive/
+
+# Local model artifacts
+*.pth
+*.pt
+model/
+!checkpoints/README.md

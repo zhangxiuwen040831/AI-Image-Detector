@@ -1,0 +1,127 @@
+{
+  "mode": "base_only",
+  "default_threshold": 0.2,
+  "val_default": {
+    "threshold": 0.2,
+    "precision": 0.5,
+    "recall": 1.0,
+    "f1": 0.6666666666666666,
+    "auroc": 0.3999999999999999,
+    "auprc": 0.5218543517885622,
+    "ece": 0.17594982981681823,
+    "tp": 10,
+    "fp": 10,
+    "tn": 0,
+    "fn": 0,
+    "false_positive": [
+      "1_0.jpg",
+      "1_2.jpg",
+      "1_4.jpg",
+      "1_6.jpg",
+      "1_8.jpg",
+      "1_10.jpg",
+      "1_12.jpg",
+      "1_14.jpg",
+      "1_16.jpg",
+      "1_18.jpg"
+    ],
+    "false_negative": []
+  },
+  "photos_default": {
+    "threshold": 0.2,
+    "precision": 0.47368421052631576,
+    "recall": 1.0,
+    "f1": 0.6428571428571429,
+    "auroc": 0.2444444444444444,
+    "auprc": 0.4079511141688644,
+    "ece": 0.21745464048887553,
+    "tp": 9,
+    "fp": 10,
+    "tn": 0,
+    "fn": 0,
+    "false_positive": [
+      "real1.jpg",
+      "real10.jpg",
+      "real2.jpg",
+      "real3.jpg",
+      "real4.jpg",
+      "real5.jpg",
+      "real6.jpg",
+      "real7.jpg",
+      "real8.jpg",
+      "real9.jpg"
+    ],
+    "false_negative": []
+  },
+  "val_thresholds": {
+    "best_f1": {
+      "threshold": 0.1,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "auroc": 0.3999999999999999,
+      "auprc": 0.5218543517885622,
+      "ece": 0.17594982981681823,
+      "tp": 10.0,
+      "fp": 10.0,
+      "tn": 0.0,
+      "fn": 0.0
+    },
+    "recall_ge_0_88": {
+      "threshold": 0.1,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "auroc": 0.3999999999999999,
+      "auprc": 0.5218543517885622,
+      "ece": 0.17594982981681823,
+      "tp": 10.0,
+      "fp": 10.0,
+      "tn": 0.0,
+      "fn": 0.0
+    },
+    "precision_ge_0_80": null
+  },
+  "photos_thresholds": {
+    "best_f1": {
+      "threshold": 0.1,
+      "precision": 0.47368421052631576,
+      "recall": 1.0,
+      "f1": 0.6428571428571429,
+      "auroc": 0.2444444444444444,
+      "auprc": 0.4079511141688644,
+      "ece": 0.21745464048887553,
+      "tp": 9.0,
+      "fp": 10.0,
+      "tn": 0.0,
+      "fn": 0.0
+    },
+    "recall_ge_0_88": {
+      "threshold": 0.1,
+      "precision": 0.47368421052631576,
+      "recall": 1.0,
+      "f1": 0.6428571428571429,
+      "auroc": 0.2444444444444444,
+      "auprc": 0.4079511141688644,
+      "ece": 0.21745464048887553,
+      "tp": 9.0,
+      "fp": 10.0,
+      "tn": 0.0,
+      "fn": 0.0
+    },
+    "precision_ge_0_80": null
+  },
+  "photos_false_positive": [
+    "real1.jpg",
+    "real10.jpg",
+    "real2.jpg",
+    "real3.jpg",
+    "real4.jpg",
+    "real5.jpg",
+    "real6.jpg",
+    "real7.jpg",
+    "real8.jpg",
+    "real9.jpg"
+  ],
+  "photos_false_negative": []
+}

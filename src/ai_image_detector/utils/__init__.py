@@ -11,7 +11,8 @@ from .paths import (
     TESTS_DIR,
     PRETRAINED_DIR,
     BEST_MODEL_PATH,
-    RESNET18_WEIGHTS_PATH
+    RESNET18_WEIGHTS_PATH,
+    get_model_path,
 )
 
 from .config import load_config, get_config
@@ -31,6 +32,7 @@ __all__ = [
     "PRETRAINED_DIR",
     "BEST_MODEL_PATH",
     "RESNET18_WEIGHTS_PATH",
+    "get_model_path",
     "load_config",
     "get_config",
     "setup_logger"

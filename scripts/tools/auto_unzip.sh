@@ -4,7 +4,7 @@
 # 功能：在指定时间后对archive(2).zip文件执行解压操作
 
 # 配置参数
-TARGET_DIR="/root/autodl-tmp/ai-image-detector"
+TARGET_DIR="/root/lanyun-tmp/ai-image-detector"
 ZIP_FILE="archive(2).zip"
 DELAY_SECONDS=7200  # 2小时
 CHECK_INTERVAL=600  # 10分钟

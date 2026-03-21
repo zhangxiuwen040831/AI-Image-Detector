@@ -1,6 +1,6 @@
 data:
   local_dataset_root: "C:/Users/32902/Desktop/ai-image-detector/data"
-  server_dataset_root: "/root/autodl-tmp/ai-image-detector/data"
+  server_dataset_root: "/root/lanyun-tmp/ai-image-detector/data"
   runtime_dataset_root: ""
   dataset_index_name: "dataset_index.json"
   image_size: 224

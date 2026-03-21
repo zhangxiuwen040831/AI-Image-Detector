@@ -1,131 +1,71 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 from pathlib import Path
 from typing import Dict, List
 
-import numpy as np
 import pandas as pd
-import torch
-from PIL import Image
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
-import sys
-
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from ai_image_detector.ntire.augmentations import build_eval_transform
-from ai_image_detector.ntire.model import HybridAIGCDetector
+from ai_image_detector.inference.detector import ForensicDetector
 
 
-def load_model(checkpoint: Path, device: torch.device, backbone_name: str) -> tuple[torch.nn.Module, float]:
-    model = HybridAIGCDetector(backbone_name=backbone_name, pretrained_backbone=False)
-    ckpt = torch.load(checkpoint, map_location=device)
-    state_dict = ckpt["model"]
-    if any(k.startswith("module.") for k in state_dict.keys()):
-        state_dict = {k.replace("module.", "", 1): v for k, v in state_dict.items()}
-    model.load_state_dict(state_dict, strict=False)
-    model.to(device).eval()
-    temperature = float(ckpt.get("temperature", 1.0))
-    return model, temperature
+IMAGE_EXTENSIONS = ("*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp")
 
 
-def _predict_tensor(
-    model: torch.nn.Module,
-    image: Image.Image,
-    scales: List[int],
-    tta_flip: bool,
-    temperature: float,
-    device: torch.device,
-) -> Dict[str, float]:
-    logits = []
-    fusion_weights = []
-    base = image.convert("RGB")
-    for sz in scales:
-        transform = build_eval_transform(sz)
-        arr = np.array(base)
-        x = transform(image=arr)["image"].unsqueeze(0).to(device)
-        out = model(x)
-        logits.append(out["logit"].detach().cpu())
-        fusion_weights.append(out["fusion_weights"].detach().cpu())
-        if tta_flip:
-            arr_flip = np.ascontiguousarray(np.fliplr(arr))
-            xf = transform(image=arr_flip)["image"].unsqueeze(0).to(device)
-            out_f = model(xf)
-            logits.append(out_f["logit"].detach().cpu())
-            fusion_weights.append(out_f["fusion_weights"].detach().cpu())
-    mean_logit = torch.cat(logits, dim=0).mean(dim=0, keepdim=True)
-    calibrated_logit = mean_logit / max(temperature, 1e-6)
-    prob = torch.sigmoid(calibrated_logit).item()
-    fw = torch.cat(fusion_weights, dim=0).mean(dim=0)
+def predict_single(detector: ForensicDetector, image_path: Path, threshold: float | None, threshold_profile: str) -> Dict[str, object]:
+    result = detector.predict(
+        str(image_path),
+        threshold=threshold,
+        threshold_profile=threshold_profile,
+    )
     return {
-        "probability": float(prob),
-        "raw_logit": float(mean_logit.item()),
-        "calibrated_logit": float(calibrated_logit.item()),
-        "fusion_semantic": float(fw[0].item()),
-        "fusion_frequency": float(fw[1].item()),
-        "fusion_noise": float(fw[2].item()),
+        "path": str(image_path),
+        "prediction": result.get("prediction"),
+        "label": result.get("label"),
+        "label_id": result.get("label_id"),
+        "probability": result.get("probability"),
+        "threshold_used": result.get("threshold_used"),
+        "threshold_profile": result.get("threshold_profile"),
+        "mode": result.get("mode"),
+        "semantic_score": result.get("semantic_score"),
+        "frequency_score": result.get("frequency_score"),
+        "raw_logit": result.get("raw_logit"),
     }
 
 
-def infer_single(args: argparse.Namespace, model: torch.nn.Module, device: torch.device, temperature: float) -> None:
-    image = Image.open(args.image).convert("RGB")
-    pred = _predict_tensor(
-        model=model,
-        image=image,
-        scales=args.scales,
-        tta_flip=args.tta_flip,
-        temperature=temperature,
-        device=device,
-    )
-    label = int(pred["probability"] >= args.threshold)
-    print(f"image={args.image}")
-    print(f"probability={pred['probability']:.6f} predicted_label={label} threshold={args.threshold:.3f}")
-    print(
-        "fusion_weights="
-        f"(semantic={pred['fusion_semantic']:.3f}, "
-        f"frequency={pred['fusion_frequency']:.3f}, "
-        f"noise={pred['fusion_noise']:.3f})"
-    )
-
-
-def infer_folder(args: argparse.Namespace, model: torch.nn.Module, device: torch.device, temperature: float) -> None:
-    folder = Path(args.folder)
-    paths = []
-    for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"):
-        paths.extend(folder.rglob(ext))
+def infer_folder(detector: ForensicDetector, folder: Path, threshold: float | None, threshold_profile: str) -> List[Dict[str, object]]:
+    image_paths: List[Path] = []
+    for pattern in IMAGE_EXTENSIONS:
+        image_paths.extend(folder.rglob(pattern))
     rows = []
-    for p in sorted(paths):
-        image = Image.open(p).convert("RGB")
-        pred = _predict_tensor(
-            model=model,
-            image=image,
-            scales=args.scales,
-            tta_flip=args.tta_flip,
-            temperature=temperature,
-            device=device,
-        )
-        pred["path"] = str(p)
-        pred["pred_label"] = int(pred["probability"] >= args.threshold)
-        rows.append(pred)
-    out_csv = Path(args.out_csv) if args.out_csv else folder / "inference_results.csv"
-    pd.DataFrame(rows).to_csv(out_csv, index=False)
-    print(f"Saved inference CSV: {out_csv}")
-    print(f"Processed images: {len(rows)}")
+    for image_path in sorted(image_paths):
+        rows.append(predict_single(detector, image_path=image_path, threshold=threshold, threshold_profile=threshold_profile))
+    return rows
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", type=str, required=True)
-    parser.add_argument("--backbone-name", type=str, default="vit_base_patch16_clip_224.openai")
+    parser = argparse.ArgumentParser(description="Inference entrypoint for the final V10 detector.")
+    parser.add_argument("--checkpoint", type=str, default="checkpoints/best.pth")
     parser.add_argument("--image", type=str, default=None)
     parser.add_argument("--folder", type=str, default=None)
     parser.add_argument("--out-csv", type=str, default=None)
-    parser.add_argument("--scales", type=int, nargs="+", default=[224, 336])
-    parser.add_argument("--tta-flip", action="store_true")
-    parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument(
+        "--threshold-profile",
+        type=str,
+        default="balanced",
+        choices=["recall-first", "balanced", "precision-first", "recall", "precision", "f1"],
+    )
+    parser.add_argument("--threshold", type=float, default=None)
     return parser.parse_args()
 
 
@@ -133,12 +73,33 @@ def main() -> None:
     args = parse_args()
     if args.image is None and args.folder is None:
         raise ValueError("Provide either --image or --folder")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, temperature = load_model(Path(args.checkpoint), device=device, backbone_name=args.backbone_name)
+
+    detector = ForensicDetector(
+        model_path=args.checkpoint,
+        device=args.device,
+        config_name="default",
+    )
+
     if args.image is not None:
-        infer_single(args, model, device, temperature)
+        row = predict_single(
+            detector,
+            image_path=Path(args.image),
+            threshold=args.threshold,
+            threshold_profile=args.threshold_profile,
+        )
+        print(json.dumps(row, ensure_ascii=False, indent=2))
+
     if args.folder is not None:
-        infer_folder(args, model, device, temperature)
+        rows = infer_folder(
+            detector,
+            folder=Path(args.folder),
+            threshold=args.threshold,
+            threshold_profile=args.threshold_profile,
+        )
+        out_csv = Path(args.out_csv) if args.out_csv else Path(args.folder) / "inference_results.csv"
+        pd.DataFrame(rows).to_csv(out_csv, index=False)
+        print(f"Saved inference CSV: {out_csv}")
+        print(f"Processed images: {len(rows)}")
 
 
 if __name__ == "__main__":

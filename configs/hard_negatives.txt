@@ -1,0 +1,5 @@
+# Real images repeatedly over-scored as AIGC in the latest full evaluation.
+# Deprecated fallback list.
+# V6.1 should prefer automatic hard-negative mining from the training set.
+# If you add manual entries here, they must be filenames that actually exist
+# inside the training dataset shards rather than photos_test samples.
