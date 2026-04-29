@@ -1,13 +1,24 @@
-
 import React, { useCallback, useState } from 'react';
 import { Upload, X, FileImage, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 
-const UploadPanel = ({ onUpload, isAnalyzing, language = 'zh' }) => {
+const UploadPanel = ({
+  onUpload,
+  isAnalyzing,
+  language = 'zh',
+  hasResult = false,
+  layout = 'default',
+  thresholdMode = 'standard',
+  thresholdOptions = [],
+  onThresholdModeChange,
+  thresholdNote = '',
+}) => {
   const [dragActive, setDragActive] = useState(false);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
+  const isRail = layout === 'rail';
+  const isWorkspace = layout === 'workspace';
 
   const handleDrag = useCallback((e) => {
     e.preventDefault();
@@ -36,7 +47,7 @@ const UploadPanel = ({ onUpload, isAnalyzing, language = 'zh' }) => {
     e.stopPropagation();
     setDragActive(false);
     setError(null);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (validateFile(file)) {
@@ -72,170 +83,186 @@ const UploadPanel = ({ onUpload, isAnalyzing, language = 'zh' }) => {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto mb-8">
-      <AnimatePresence mode="wait">
-        {!preview ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 1 }}
-            className={clsx(
-              "relative border-2 border-dashed rounded-xl p-10 text-center transition-all duration-300 glass-card cursor-pointer group",
-              dragActive ? "border-primary bg-primary/5 scale-[1.01]" : "border-white/20 hover:border-primary/50",
-              error ? "border-red-500/50" : ""
-            )}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('file-upload').click()}
-          >
-            <input
-              id="file-upload"
-              type="file"
-              className="hidden"
-              accept="image/*"
-              onChange={handleChange}
-              disabled={isAnalyzing}
-            />
-            
-            <div className="flex flex-col items-center justify-center gap-4">
-              <div className="p-4 rounded-full bg-white/5 group-hover:bg-primary/20 transition-colors duration-300">
-                <Upload className="w-8 h-8 text-gray-400 group-hover:text-primary transition-colors" />
-              </div>
-              <div>
-                <AnimatePresence mode="wait">
-                  <motion.h3 
-                    key={`${language}-upload-title`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="text-lg font-medium text-white mb-1 min-h-[24px]"
-                  >
-                    {language === 'zh' ? '上传图像进行分析' : 'Upload image for analysis'}
-                  </motion.h3>
-                </AnimatePresence>
-                <AnimatePresence mode="wait">
-                  <motion.p 
-                    key={`${language}-upload-desc`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="text-sm text-gray-400 min-h-[20px]"
-                  >
-                    {language === 'zh' ? '拖拽文件或点击浏览' : 'Drag file or click to browse'}
-                  </motion.p>
-                </AnimatePresence>
-              </div>
-              <AnimatePresence mode="wait">
-                <motion.p 
-                  key={`${language}-upload-supported`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="text-xs text-gray-500 mt-2 min-h-[16px]"
-                >
-                  {language === 'zh' ? '支持：JPG, PNG, WEBP (最大10MB)' : 'Supported: JPG, PNG, WEBP (max 10MB)'}
-                </motion.p>
-              </AnimatePresence>
+    <div className={`space-y-4 ${isWorkspace ? 'h-full' : ''}`}>
+      <div className={`rounded-[28px] border border-line bg-white shadow-card ${isRail ? 'p-4 lg:p-5' : 'p-5 md:p-6'} ${isWorkspace ? 'flex h-full flex-col' : ''}`}>
+        <div className={`mb-5 flex flex-col gap-3 ${isRail ? '' : 'md:flex-row md:items-end md:justify-between md:gap-6'}`}>
+          <div>
+            <p className="section-title mb-2">{language === 'zh' ? '主要操作' : 'Primary action'}</p>
+            <h3 className="whitespace-nowrap text-2xl font-semibold tracking-tight text-ink">
+              {language === 'zh' ? '上传待检测图像' : 'Upload image for inspection'}
+            </h3>
+          </div>
+          <p className={`${isRail || isWorkspace ? 'max-w-none' : 'max-w-md'} text-sm leading-7 text-muted`}>
+            {language === 'zh'
+              ? '支持拖拽或点击选择。上传后会返回最终判定、三分支分析概览以及噪声残差与频谱等取证证据。'
+              : 'Drag and drop or click to browse. Each upload returns the final decision, a three-branch analysis overview, and forensic evidence such as noise residuals and spectrum maps.'}
+          </p>
+        </div>
+
+        <div className="mb-5 rounded-[24px] border border-line bg-panel p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="section-title mb-2">{language === 'zh' ? '阈值模式' : 'Threshold mode'}</p>
+              <h4 className="text-lg font-semibold tracking-tight text-ink">
+                {thresholdOptions.find((option) => option.key === thresholdMode)?.label || ''}
+              </h4>
             </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="relative rounded-xl overflow-hidden glass-card border-primary/30 neon-glow"
-          >
-            <div className="absolute top-4 right-4 z-10">
-              <button
-                onClick={(e) => { e.stopPropagation(); clearFile(); }}
-                className="p-2 bg-black/50 hover:bg-red-500/80 rounded-full text-white transition-all backdrop-blur-sm"
+            <div className="flex flex-wrap gap-2">
+              {thresholdOptions.map((option) => {
+                const active = option.key === thresholdMode;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => onThresholdModeChange?.(option.key)}
+                    className={clsx(
+                      'rounded-full border px-4 py-2 text-sm font-medium transition-colors',
+                      active
+                        ? 'border-slate-700 bg-slate-700 text-white'
+                        : 'border-line bg-white text-ink hover:border-lineStrong hover:bg-slate-50'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <p className="mt-3 text-sm leading-7 text-muted">{thresholdNote}</p>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {!preview ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className={clsx(
+                `group relative overflow-hidden rounded-[26px] border-2 border-dashed bg-panel text-center transition-all duration-300 ${isRail ? 'px-5 py-8' : 'px-6 py-12'}`,
+                dragActive ? 'border-slate-500 bg-slate-100' : 'border-line hover:border-lineStrong hover:bg-slate-50',
+                error ? 'border-red-300' : '',
+                isAnalyzing ? 'cursor-progress' : 'cursor-pointer'
+              )}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('file-upload').click()}
+            >
+              <input
+                id="file-upload"
+                type="file"
+                className="hidden"
+                accept="image/*"
+                onChange={handleChange}
                 disabled={isAnalyzing}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="flex flex-col md:flex-row h-64">
-              <div className="w-full md:w-1/2 bg-black/40 flex items-center justify-center p-4">
-                <img 
-                  src={preview} 
-                  alt="Preview" 
-                  className="max-h-full max-w-full object-contain rounded-lg shadow-lg" 
-                />
-              </div>
-              <div className="w-full md:w-1/2 p-6 flex flex-col justify-center items-start border-l border-white/10">
-                <div className="flex items-center gap-2 text-primary mb-2">
-                  <FileImage className="w-5 h-5" />
-                  <AnimatePresence mode="wait">
-                    <motion.span 
-                      key={`${language}-loaded`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="text-sm font-mono"
-                    >
-                      {language === 'zh' ? '图像已加载' : 'Image loaded'}
-                    </motion.span>
-                  </AnimatePresence>
+              />
+
+              <div className={`mx-auto flex flex-col items-center ${isRail || isWorkspace ? 'max-w-none' : 'max-w-xl'}`}>
+                <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[20px] border border-line bg-white shadow-soft">
+                  <Upload className="h-7 w-7 text-primary" />
                 </div>
-                <AnimatePresence mode="wait">
-                  <motion.h3 
-                    key={`${language}-ready`}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    transition={{ duration: 0.3 }}
-                    className="text-xl font-bold text-white mb-4 min-h-[32px]"
-                  >
-                    {language === 'zh' ? '准备进行分析' : 'Ready for analysis'}
-                  </motion.h3>
-                </AnimatePresence>
-                <AnimatePresence mode="wait">
-                  <motion.p 
-                    key={`${language}-analyze`}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    transition={{ duration: 0.3 }}
-                    className="text-sm text-gray-400 mb-6 min-h-[40px]"
-                  >
-                    {language === 'zh' ? '系统将分析全局语义、噪声伪迹与频域伪迹特征，并进行融合判定。' : 'The system will analyze global semantics, noise artifacts, and frequency artifacts, then fuse them for the final decision.'}
-                  </motion.p>
-                </AnimatePresence>
-                
-                {isAnalyzing && (
-                  <div className="flex items-center gap-3 w-full">
-                    <div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden">
-                      <motion.div 
-                        className="h-full bg-primary"
-                        initial={{ width: "0%" }}
-                        animate={{ width: "100%" }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                <h4 className="text-xl font-semibold tracking-tight text-ink">
+                  {language === 'zh' ? '拖拽图像到此处，或点击选择文件' : 'Drop an image here or click to browse'}
+                </h4>
+                <p className="mt-3 text-sm leading-7 text-muted">
+                  {language === 'zh'
+                    ? '支持 JPG、PNG、WEBP，单文件大小上限 10MB。'
+                    : 'Supports JPG, PNG, and WEBP, with a maximum size of 10MB per file.'}
+                </p>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="preview"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="overflow-hidden rounded-[26px] border border-line bg-panel"
+            >
+              <div className="flex items-center justify-between border-b border-line px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-soft">
+                    <FileImage className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="section-title">{language === 'zh' ? '已载入图像' : 'Loaded image'}</p>
+                    <h4 className="text-base font-semibold text-ink">
+                      {language === 'zh' ? '准备执行检测' : 'Ready for analysis'}
+                    </h4>
+                  </div>
+                </div>
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); clearFile(); }}
+                  className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+                  disabled={isAnalyzing}
+                >
+                  <X className="h-4 w-4" />
+                  <span>{language === 'zh' ? '清除' : 'Clear'}</span>
+                </button>
+              </div>
+
+              <div className={`grid gap-0 ${isRail ? 'grid-cols-1' : 'md:grid-cols-[minmax(0,1.05fr)_minmax(280px,0.95fr)]'}`}>
+                <div className={`flex items-center justify-center bg-white p-5 ${isRail ? 'min-h-[220px]' : 'min-h-[300px]'}`}>
+                  <img
+                    src={preview}
+                    alt="Preview"
+                    className={`${isRail ? 'max-h-[220px]' : 'max-h-[360px]'} w-full rounded-[20px] border border-line bg-panel object-contain shadow-soft`}
+                  />
+                </div>
+                <div className={`flex flex-col justify-center border-t border-line p-6 ${isRail ? '' : 'md:border-l md:border-t-0'}`}>
+                  <p className="section-title">{language === 'zh' ? '推理状态' : 'Inference status'}</p>
+                  <h4 className="mt-3 text-2xl font-semibold tracking-tight text-ink">
+                    {language === 'zh' ? '图像已载入工作区' : 'Image loaded into workspace'}
+                  </h4>
+                  <p className="mt-4 text-sm leading-7 text-muted">
+                    {language === 'zh'
+                      ? '系统会同时计算语义结构、频域分布与噪声残差线索，并以稳定推理路径给出最终判定。'
+                      : 'The system computes semantic structure, frequency distribution, and noise residual cues, then uses the stable inference path for the final decision.'}
+                  </p>
+
+                  <div className="mt-6 rounded-[20px] border border-line bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between text-sm">
+                      <span className="font-medium text-ink">{language === 'zh' ? '检测进度' : 'Analysis progress'}</span>
+                      <span className="text-muted">
+                        {hasResult
+                          ? (language === 'zh' ? '已完成' : 'Completed')
+                          : isAnalyzing
+                            ? (language === 'zh' ? '进行中' : 'Running')
+                            : (language === 'zh' ? '等待结果' : 'Waiting for result')}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-panelMuted">
+                      <motion.div
+                        className="h-full rounded-full bg-slate-700"
+                        initial={{ width: '8%' }}
+                        animate={{ width: hasResult ? '100%' : isAnalyzing ? '92%' : '20%' }}
+                        transition={
+                          hasResult
+                            ? { duration: 0.3, ease: 'easeOut' }
+                            : isAnalyzing
+                              ? { duration: 1.8, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }
+                              : { duration: 0.35 }
+                        }
                       />
                     </div>
-                    <span className="text-xs font-mono text-primary animate-pulse">{language === 'zh' ? '分析中...' : 'Analyzing...'}</span>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       {error && (
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2 text-red-400 text-sm"
+          className="flex items-center gap-3 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
         >
-          <AlertCircle className="w-4 h-4" />
+          <AlertCircle className="h-4 w-4" />
           {error}
         </motion.div>
       )}

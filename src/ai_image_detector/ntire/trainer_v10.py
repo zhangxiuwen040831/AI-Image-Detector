@@ -29,6 +29,15 @@ class V10Trainer:
         semantic_aux_weight: float = 0.20,
         frequency_aux_weight: float = 0.20,
         noise_aux_weight: float = 0.05,
+        noise_logit_aux_weight: float = 0.15,
+        noise_delta_aux_weight: float = 0.30,
+        noise_error_scale: float = 2.0,
+        hard_real_noise_bonus: float = 0.75,
+        fragile_aigc_noise_bonus: float = 0.60,
+        noise_correction_weight: float = 0.20,
+        noise_effect_target_scale: float = 0.25,
+        alpha_supervision_weight: float = 0.08,
+        alpha_target_error_scale: float = 1.5,
         hard_real_margin_weight: float = 0.10,
         hard_real_margin: float = 0.25,
         anchor_real_margin_weight: float = 0.14,
@@ -53,6 +62,15 @@ class V10Trainer:
         self.semantic_aux_weight = float(semantic_aux_weight)
         self.frequency_aux_weight = float(frequency_aux_weight)
         self.noise_aux_weight = float(noise_aux_weight)
+        self.noise_logit_aux_weight = float(noise_logit_aux_weight)
+        self.noise_delta_aux_weight = float(noise_delta_aux_weight)
+        self.noise_error_scale = float(noise_error_scale)
+        self.hard_real_noise_bonus = float(hard_real_noise_bonus)
+        self.fragile_aigc_noise_bonus = float(fragile_aigc_noise_bonus)
+        self.noise_correction_weight = float(noise_correction_weight)
+        self.noise_effect_target_scale = float(noise_effect_target_scale)
+        self.alpha_supervision_weight = float(alpha_supervision_weight)
+        self.alpha_target_error_scale = float(alpha_target_error_scale)
         self.hard_real_margin_weight = float(hard_real_margin_weight)
         self.hard_real_margin = float(hard_real_margin)
         self.anchor_real_margin_weight = float(anchor_real_margin_weight)
@@ -139,7 +157,7 @@ class V10Trainer:
 
     def _prototype_margin_loss(
         self,
-        base_feat: torch.Tensor,
+        fused_feat: torch.Tensor,
         labels: torch.Tensor,
         hard_real_mask: torch.Tensor,
     ) -> torch.Tensor:
@@ -149,14 +167,14 @@ class V10Trainer:
         aigc_mask = labels >= 0.5
         active_hard_real = hard_real_mask > 0.5
         if (not torch.any(real_mask)) or (not torch.any(aigc_mask)) or (not torch.any(active_hard_real)):
-            return base_feat.new_zeros(())
-        feat = F.normalize(base_feat.float(), dim=1)
+            return fused_feat.new_zeros(())
+        feat = F.normalize(fused_feat.float(), dim=1)
         real_proto = F.normalize(feat[real_mask].mean(dim=0, keepdim=True), dim=1)
         aigc_proto = F.normalize(feat[aigc_mask].mean(dim=0, keepdim=True), dim=1)
         hard_feat = feat[active_hard_real]
         sim_real = torch.matmul(hard_feat, real_proto.t()).view(-1)
         sim_aigc = torch.matmul(hard_feat, aigc_proto.t()).view(-1)
-        return torch.relu(base_feat.new_tensor(self.prototype_margin) - (sim_real - sim_aigc)).mean()
+        return torch.relu(fused_feat.new_tensor(self.prototype_margin) - (sim_real - sim_aigc)).mean()
 
     def _set_runtime_train_mode(self) -> None:
         self.model.train()
@@ -167,6 +185,8 @@ class V10Trainer:
             "noise_branch",
             "primary_fusion",
             "base_classifier",
+            "tri_fusion",
+            "tri_classifier",
             "semantic_head",
             "frequency_head",
             "noise_proj",
@@ -194,10 +214,13 @@ class V10Trainer:
         out = self.model(images)
         labels_2d = labels.view(-1, 1).float()
         labels_flat = labels_2d.view(-1)
-        base_logit = out["base_logit"]
+        final_logit = out["logit"]
+        legacy_base_logit = out.get("legacy_base_logit", out.get("base_logit", final_logit))
         semantic_logit = out["semantic_logit"]
         frequency_logit = out["freq_logit"]
-        main_logit = out["logit"]
+        main_logit = final_logit
+        noise_logit = out.get("noise_logit")
+        noise_delta_logit = out.get("noise_delta_logit")
         hard_real_mask = self._metadata_boolean_mask(metadata, key="hard_real_buffer_hit", batch_size=labels.shape[0])
         hard_real_real_mask = hard_real_mask * (labels_flat < 0.5).float()
         anchor_hard_real_mask = self._metadata_boolean_mask(
@@ -210,43 +233,107 @@ class V10Trainer:
             key="fragile_aigc_buffer_hit",
             batch_size=labels.shape[0],
         ) * (labels_flat >= 0.5).float()
+        final_prob_detached = torch.sigmoid(final_logit.detach()).view(-1)
+        final_error = torch.abs(final_prob_detached - labels_flat)
+        noise_focus = (
+            1.0
+            + self.noise_error_scale * final_error
+            + self.hard_real_noise_bonus * hard_real_real_mask
+            + self.fragile_aigc_noise_bonus * fragile_aigc_mask
+        )
+        focus_mask = torch.clamp(final_error + hard_real_real_mask + fragile_aigc_mask, max=1.0)
 
-        base_bce_loss = self.base_bce_weight * F.binary_cross_entropy_with_logits(base_logit, labels_2d)
+        main_bce_loss = self.base_bce_weight * F.binary_cross_entropy_with_logits(final_logit, labels_2d)
+        base_bce_loss = main_bce_loss
         semantic_aux_loss = self.semantic_aux_weight * F.binary_cross_entropy_with_logits(semantic_logit, labels_2d)
         frequency_aux_loss = self.frequency_aux_weight * F.binary_cross_entropy_with_logits(frequency_logit, labels_2d)
+        noise_aux_loss = (
+            self.noise_aux_weight * F.binary_cross_entropy_with_logits(noise_logit, labels_2d)
+            if noise_logit is not None
+            else labels_2d.new_zeros(())
+        )
         hard_real_margin_loss = self.hard_real_margin_weight * self._weighted_mean(
-            torch.relu(base_logit.view(-1) + self.hard_real_margin),
+            torch.relu(final_logit.view(-1) + self.hard_real_margin),
             hard_real_real_mask,
         )
         anchor_real_margin_loss = self.anchor_real_margin_weight * self._weighted_mean(
-            torch.relu(base_logit.view(-1) + self.anchor_real_margin),
+            torch.relu(final_logit.view(-1) + self.anchor_real_margin),
             anchor_hard_real_mask,
         )
         prototype_margin_loss = self.prototype_margin_weight * self._prototype_margin_loss(
-            base_feat=out["base_feat"],
+            fused_feat=out.get("fused_feat", out["base_feat"]),
             labels=labels_flat,
             hard_real_mask=hard_real_real_mask,
         )
         fragile_aigc_support_loss = self.fragile_aigc_weight * self._weighted_mean(
             torch.relu(
-                base_logit.new_tensor(self.fragile_aigc_target_prob) - torch.sigmoid(base_logit.view(-1))
+                final_logit.new_tensor(self.fragile_aigc_target_prob) - torch.sigmoid(final_logit.view(-1))
             ),
             fragile_aigc_mask,
         )
 
-        if self.phase == "phase3_competition" and getattr(self._unwrap_model(), "inference_mode", "base_only") == "hybrid_optional":
+        alpha_ratio = out.get("alpha_ratio_used", out.get("alpha_ratio", labels_2d.new_zeros(labels_2d.shape))).view(-1)
+        noise_logit_aux_loss = labels_2d.new_zeros(())
+        noise_delta_aux_loss = labels_2d.new_zeros(())
+        noise_correction_loss = labels_2d.new_zeros(())
+        alpha_supervision_loss = labels_2d.new_zeros(())
+
+        if False:
             hybrid_bce_loss = self.hybrid_main_weight * F.binary_cross_entropy_with_logits(main_logit, labels_2d)
-            base_support_loss = self.base_support_weight * F.binary_cross_entropy_with_logits(base_logit, labels_2d)
-            noise_head_loss = self.noise_aux_weight * F.binary_cross_entropy_with_logits(
-                out["noise_delta_logit"],
-                labels_2d,
+            base_support_loss = self.base_support_weight * F.binary_cross_entropy_with_logits(legacy_base_logit, labels_2d)
+            if noise_logit is not None:
+                noise_logit_bce = F.binary_cross_entropy_with_logits(
+                    noise_logit.view(-1),
+                    labels_flat,
+                    reduction="none",
+                )
+                noise_logit_aux_loss = self.noise_logit_aux_weight * (noise_logit_bce * noise_focus).mean()
+            if noise_delta_logit is not None:
+                noise_delta_bce = F.binary_cross_entropy_with_logits(
+                    noise_delta_logit.view(-1),
+                    labels_flat,
+                    reduction="none",
+                )
+                noise_delta_aux_loss = (
+                    self.noise_aux_weight * F.binary_cross_entropy_with_logits(noise_delta_logit, labels_2d)
+                    + self.noise_delta_aux_weight * (noise_delta_bce * noise_focus).mean()
+                )
+                desired_direction = labels_flat * 2.0 - 1.0
+                effective_noise_delta = alpha_ratio * noise_delta_logit.view(-1)
+                target_effect = (
+                    torch.clamp(
+                        final_error
+                        + 0.50 * hard_real_real_mask
+                        + 0.40 * fragile_aigc_mask,
+                        min=0.0,
+                        max=1.0,
+                    )
+                    * self.noise_effect_target_scale
+                )
+                noise_correction_loss = self.noise_correction_weight * self._weighted_mean(
+                    torch.relu(target_effect - desired_direction * effective_noise_delta),
+                    focus_mask,
+                )
+            alpha_target = torch.clamp(
+                final_error * self.alpha_target_error_scale
+                + 0.20 * hard_real_real_mask
+                + 0.15 * fragile_aigc_mask,
+                min=0.0,
+                max=1.0,
+            )
+            alpha_supervision_loss = self.alpha_supervision_weight * self._weighted_mean(
+                (alpha_ratio - alpha_target).pow(2),
+                focus_mask,
             )
             total_loss = (
                 hybrid_bce_loss
                 + base_support_loss
                 + semantic_aux_loss
                 + frequency_aux_loss
-                + noise_head_loss
+                + noise_logit_aux_loss
+                + noise_delta_aux_loss
+                + noise_correction_loss
+                + alpha_supervision_loss
                 + hard_real_margin_loss
                 + anchor_real_margin_loss
                 + prototype_margin_loss
@@ -254,27 +341,31 @@ class V10Trainer:
             )
             main_bce_loss = hybrid_bce_loss
         else:
-            noise_head_loss = labels_2d.new_zeros(())
             total_loss = (
-                base_bce_loss
+                main_bce_loss
                 + semantic_aux_loss
                 + frequency_aux_loss
+                + noise_aux_loss
                 + hard_real_margin_loss
                 + anchor_real_margin_loss
                 + prototype_margin_loss
                 + fragile_aigc_support_loss
             )
-            main_bce_loss = base_bce_loss
 
-        sf_weights = out["sf_weights"]
-        alpha_ratio = out.get("alpha_ratio_used", out.get("alpha_ratio", labels_2d.new_zeros(labels_2d.shape)))
+        fusion_weights = out.get("fusion_weights", out.get("sf_weights"))
+        hybrid_prob_gap = torch.abs(torch.sigmoid(main_logit.detach()) - torch.sigmoid(legacy_base_logit.detach())).view(-1)
+        noise_delta_abs = torch.abs(noise_delta_logit.view(-1)) if noise_delta_logit is not None else labels_flat.new_zeros(labels_flat.shape)
+        effective_noise_delta_abs = torch.abs(alpha_ratio * (noise_delta_logit.view(-1) if noise_delta_logit is not None else labels_flat.new_zeros(labels_flat.shape)))
         loss_dict = {
             "total_loss": total_loss,
             "main_bce_loss": main_bce_loss,
             "base_bce_loss": base_bce_loss,
             "semantic_aux_loss": semantic_aux_loss,
             "frequency_aux_loss": frequency_aux_loss,
-            "noise_aux_loss": noise_head_loss,
+            "noise_aux_loss": noise_aux_loss,
+            "noise_logit_aux_loss": noise_logit_aux_loss,
+            "noise_correction_loss": noise_correction_loss,
+            "alpha_supervision_loss": alpha_supervision_loss,
             "hard_real_margin_loss": hard_real_margin_loss,
             "anchor_real_margin_loss": anchor_real_margin_loss,
             "prototype_margin_loss": prototype_margin_loss,
@@ -282,11 +373,17 @@ class V10Trainer:
             "hard_real_count": hard_real_real_mask.sum(),
             "anchor_hard_real_count": anchor_hard_real_mask.sum(),
             "fragile_aigc_count": fragile_aigc_mask.sum(),
-            "base_logit_mean": base_logit.mean(),
+            "base_logit_mean": final_logit.mean(),
             "final_logit_mean": main_logit.mean(),
-            "sf_semantic_mean": sf_weights[:, 0].mean(),
-            "sf_frequency_mean": sf_weights[:, 1].mean(),
-            "alpha_mean": alpha_ratio.view(-1).mean(),
+            "sf_semantic_mean": fusion_weights[:, 0].mean(),
+            "sf_frequency_mean": fusion_weights[:, 1].mean(),
+            "fusion_noise_mean": fusion_weights[:, 2].mean() if fusion_weights.shape[1] > 2 else labels_2d.new_zeros(()),
+            "alpha_mean": alpha_ratio.mean(),
+            "noise_logit_mean": noise_logit.view(-1).mean() if noise_logit is not None else labels_2d.new_zeros(()),
+            "noise_delta_mean": noise_delta_logit.view(-1).mean() if noise_delta_logit is not None else labels_2d.new_zeros(()),
+            "noise_delta_abs_mean": noise_delta_abs.mean(),
+            "effective_noise_delta_abs_mean": effective_noise_delta_abs.mean(),
+            "hybrid_base_prob_gap_mean": hybrid_prob_gap.mean(),
         }
         return out, loss_dict
 
@@ -315,6 +412,9 @@ class V10Trainer:
             "semantic_aux_loss": [],
             "frequency_aux_loss": [],
             "noise_aux_loss": [],
+            "noise_logit_aux_loss": [],
+            "noise_correction_loss": [],
+            "alpha_supervision_loss": [],
             "hard_real_margin_loss": [],
             "anchor_real_margin_loss": [],
             "prototype_margin_loss": [],
@@ -326,7 +426,13 @@ class V10Trainer:
             "final_logit_mean": [],
             "sf_semantic_mean": [],
             "sf_frequency_mean": [],
+            "fusion_noise_mean": [],
             "alpha_mean": [],
+            "noise_logit_mean": [],
+            "noise_delta_mean": [],
+            "noise_delta_abs_mean": [],
+            "effective_noise_delta_abs_mean": [],
+            "hybrid_base_prob_gap_mean": [],
         }
         y_true: List[float] = []
         y_prob: List[float] = []
@@ -529,6 +635,9 @@ class V10Trainer:
                 f"train_loss={train_metrics.get('loss', 0.0):.4f} "
                 f"val_base_f1={val_metrics.get('base_f1', 0.0):.4f} "
                 f"val_base_auroc={val_metrics.get('base_auroc', 0.0):.4f} "
+                f"alpha={val_metrics.get('alpha_mean', 0.0):.4f} "
+                f"noise_delta_abs={val_metrics.get('noise_delta_abs_mean', 0.0):.4f} "
+                f"hybrid_gap={val_metrics.get('hybrid_base_prob_gap_mean', 0.0):.5f} "
                 f"hard_real={val_metrics.get('hard_real_count', 0.0):.1f} "
                 f"anchor_real={val_metrics.get('anchor_hard_real_count', 0.0):.1f} "
                 f"fragile_aigc={val_metrics.get('fragile_aigc_count', 0.0):.1f}"

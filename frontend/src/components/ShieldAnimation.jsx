@@ -30,7 +30,7 @@ const ShieldAnimation = () => {
   const config = useMemo(() => ({
     // Visual Style
     particleCount: 60, // Slightly increased for better density
-    colors: ['#ffffff', '#00D1FF'], // White and Cyan
+    colors: ['#1f2937', '#94a3b8'],
     canvasSize: 40, // 40x40 logical pixels
     borderRadius: 8, // Container rounded corner radius
     
@@ -217,7 +217,7 @@ const ShieldAnimation = () => {
         }}
         transition={{ duration: 0.4, ease: "easeInOut" }} 
       >
-        <Shield className="text-white w-6 h-6" />
+        <Shield className="h-6 w-6 text-slate-900" strokeWidth={1.9} />
       </motion.div>
     </div>
   );

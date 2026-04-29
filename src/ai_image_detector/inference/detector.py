@@ -4,11 +4,9 @@ import os
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Union
 
-import cv2
 import numpy as np
 import torch
-import torch.nn.functional as F
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from ai_image_detector.models.model import AIGCImageDetector
 from ai_image_detector.ntire.augmentations import build_eval_transform
@@ -135,6 +133,17 @@ class ForensicDetector:
                 except Exception:
                     continue
 
+        self.analysis_thresholds = {
+            "photos-test-precision-first": 0.55,
+        }
+        cfg_analysis_thresholds = infer_cfg.get("analysis_thresholds")
+        if isinstance(cfg_analysis_thresholds, dict):
+            for key, value in cfg_analysis_thresholds.items():
+                try:
+                    self.analysis_thresholds[str(key).strip().lower().replace("_", "-")] = float(value)
+                except Exception:
+                    continue
+
         env_profile = os.getenv("AIGC_THRESHOLD_PROFILE")
         self.threshold_profile = self._normalize_threshold_profile(
             str(infer_cfg.get("threshold_profile") or env_profile or "balanced")
@@ -166,10 +175,17 @@ class ForensicDetector:
     @staticmethod
     def _default_mode_for_family(model_family: str) -> str:
         if model_family == "v10":
-            return "base_only"
+            return "tri_fusion"
         if model_family == "ntire":
             return "hybrid"
         return "legacy"
+
+    def get_available_inference_modes(self) -> List[str]:
+        if self.model_family == "v10":
+            return ["tri_fusion"]
+        if self.model_family == "ntire":
+            return ["hybrid"]
+        return ["legacy"]
 
     @staticmethod
     def _normalize_threshold_profile(profile: str) -> str:
@@ -328,172 +344,22 @@ class ForensicDetector:
 
         return self._aggregate_tensor_outputs(all_outputs)
 
-    def generate_fusion_evidence_plot(self, semantic, freq, noise, prediction):
-        weights = np.array([float(semantic), float(freq), float(noise)], dtype=np.float32)
-        weights = np.clip(weights, 0.0, None)
-        total = float(weights.sum())
-        if total <= 1e-8:
-            weights = np.array([1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0], dtype=np.float32)
-        else:
-            weights = weights / total
-
-        v_sem = np.array([0.5, 0.866], dtype=np.float32)
-        v_noise = np.array([0.0, 0.0], dtype=np.float32)
-        v_freq = np.array([1.0, 0.0], dtype=np.float32)
-        point = weights[0] * v_sem + weights[2] * v_noise + weights[1] * v_freq
-        width = 480
-        height = 480
-        margin_x = 48
-        margin_y = 62
-        draw_h = height - 2 * margin_y
-        draw_w = width - 2 * margin_x
-
-        def to_canvas(v):
-            x = margin_x + float(v[0]) * draw_w
-            y = height - margin_y - float(v[1]) * draw_h
-            return (x, y)
-
-        sem_xy = to_canvas(v_sem)
-        noise_xy = to_canvas(v_noise)
-        freq_xy = to_canvas(v_freq)
-        point_xy = to_canvas(point)
-
-        img = Image.new("RGB", (width, height), "#0B1020")
-        draw = ImageDraw.Draw(img)
-
-        draw.line([noise_xy, freq_xy, sem_xy, noise_xy], fill="#9CA3AF", width=3)
-        radius = 10
-        draw.ellipse(
-            (point_xy[0] - radius, point_xy[1] - radius, point_xy[0] + radius, point_xy[1] + radius),
-            fill="#DA205A",
-            outline="#FFFFFF",
-            width=2,
-        )
-
-        draw.text((sem_xy[0] - 35, sem_xy[1] - 26), "Semantic", fill="#E5E7EB")
-        draw.text((noise_xy[0] - 18, noise_xy[1] + 8), "Noise", fill="#E5E7EB")
-        draw.text((freq_xy[0] - 34, freq_xy[1] + 8), "Frequency", fill="#E5E7EB")
-        draw.text((126, 12), "Fusion Evidence Triangle", fill="#FFFFFF")
-        draw.text((160, height - 30), "Prediction: " + prediction, fill="#E5E7EB")
-
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        return base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-    def generate_grad_cam(self, image_path, debug=False):
-        debug_info = {
-            "target_layer": self.target_layer_name,
-            "prediction_index": None,
-            "activation_shape": None,
-            "gradient_shape": None,
-            "cam_min": None,
-            "cam_max": None,
-            "grad_cam_generated": False,
-            "overlay_generated": False,
-            "error": None,
-        }
-
-        if self.model_family in {"ntire", "v10"}:
-            debug_info["error"] = (
-                "Grad-CAM is not supported for the final NTIRE/V10 detector because the deployed inference path "
-                "uses a multi-branch fused architecture without a stable single target activation map."
-            )
-            debug_info["grad_cam_status"] = "not_supported"
-            if debug or self.enable_debug:
-                self.logger.info("grad_cam_not_supported family=%s", self.model_family)
-            return None, None, debug_info
-
-        try:
-            image = Image.open(image_path).convert("RGB")
-            from src.data.transforms import get_transforms
-
-            legacy_transform = get_transforms(image_size=self.image_size)
-            img_tensor = legacy_transform(image).unsqueeze(0).to(self.device)
-
-            self.model.zero_grad(set_to_none=True)
-            outputs = self.model.detector.forward_with_features(img_tensor)
-            logit = outputs.get("logit")
-            rgb_feature_map = outputs.get("rgb_feature_map")
-
-            if logit is None:
-                raise RuntimeError("forward_with_features did not return logit")
-            if rgb_feature_map is None:
-                raise RuntimeError("forward_with_features did not return rgb_feature_map")
-
-            debug_info["activation_shape"] = list(rgb_feature_map.shape)
-
-            logit_value = logit.view(-1)[0]
-            prob_aigc = torch.sigmoid(logit_value).detach().item()
-            prediction_index = 1 if prob_aigc >= 0.5 else 0
-            target_score = logit_value if prediction_index == 1 else -logit_value
-            debug_info["prediction_index"] = prediction_index
-
-            gradients = torch.autograd.grad(
-                target_score,
-                rgb_feature_map,
-                retain_graph=False,
-                create_graph=False,
-                allow_unused=False,
-            )[0]
-            if gradients is None:
-                raise RuntimeError("gradient is None for rgb_feature_map")
-
-            debug_info["gradient_shape"] = list(gradients.shape)
-
-            weights = torch.mean(gradients, dim=(2, 3), keepdim=True)
-            cam = torch.sum(weights * rgb_feature_map, dim=1, keepdim=True)
-            cam = F.relu(cam)
-
-            cam = F.interpolate(
-                cam,
-                size=(image.height, image.width),
-                mode="bilinear",
-                align_corners=False,
-            )
-            cam_np = cam.squeeze().detach().cpu().numpy().astype(np.float32)
-            cam_min = float(np.min(cam_np))
-            cam_max = float(np.max(cam_np))
-            debug_info["cam_min"] = cam_min
-            debug_info["cam_max"] = cam_max
-
-            if cam_max - cam_min <= 1e-8:
-                cam_norm = np.zeros_like(cam_np, dtype=np.float32)
-            else:
-                cam_norm = (cam_np - cam_min) / (cam_max - cam_min)
-
-            heatmap_bgr = cv2.applyColorMap(np.uint8(np.clip(cam_norm, 0.0, 1.0) * 255), cv2.COLORMAP_JET)
-            heatmap_rgb = cv2.cvtColor(heatmap_bgr, cv2.COLOR_BGR2RGB)
-            heatmap = Image.fromarray(heatmap_rgb)
-
-            base_rgb = np.array(image, dtype=np.uint8)
-            overlay_rgb = cv2.addWeighted(base_rgb, 0.5, heatmap_rgb, 0.5, 0.0)
-            overlay = Image.fromarray(overlay_rgb)
-
-            debug_info["grad_cam_generated"] = True
-            debug_info["overlay_generated"] = True
-            if debug or self.enable_debug:
-                self.logger.info(
-                    "grad_cam_generated target_layer=%s prediction_index=%s activation_shape=%s gradient_shape=%s cam_min=%.6f cam_max=%.6f",
-                    debug_info["target_layer"],
-                    debug_info["prediction_index"],
-                    debug_info["activation_shape"],
-                    debug_info["gradient_shape"],
-                    debug_info["cam_min"],
-                    debug_info["cam_max"],
-                )
-            return heatmap, overlay, debug_info
-        except Exception as exc:
-            debug_info["error"] = str(exc)
-            self.logger.exception("grad_cam_generation_failed image_path=%s error=%s", image_path, exc)
-            return None, None, debug_info
-
     def predict(
         self,
         image_input: Union[str, Image.Image],
         debug: bool = False,
         threshold: Optional[float] = None,
         threshold_profile: Optional[str] = None,
+        mode: Optional[str] = None,
     ):
+        requested_mode = None
+        previous_mode = None
+        if mode is not None and self.model_family == "v10":
+          requested_mode = str(mode).strip()
+          previous_mode = self.inference_mode
+          self.model.set_inference_mode(requested_mode)
+          self.inference_mode = requested_mode
+
         if isinstance(image_input, Image.Image):
             image = image_input.convert("RGB")
             temp_path = None
@@ -501,142 +367,129 @@ class ForensicDetector:
             image = Image.open(image_input).convert("RGB")
             temp_path = image_input
 
-        if len(self.scales) == 1 and not self.tta_flip:
-            outputs = self._inference_single_scale(image, self.scales[0])
-        else:
-            outputs = self._inference_multi_scale(image)
+        try:
+            if len(self.scales) == 1 and not self.tta_flip:
+                outputs = self._inference_single_scale(image, self.scales[0])
+            else:
+                outputs = self._inference_multi_scale(image)
 
-        logit_tensor = outputs["logit"]
-        fusion_weights = outputs.get("fusion_weights")
-        calibrated_logit = logit_tensor / self.temperature
-        probability = float(torch.sigmoid(calibrated_logit).item())
-        probability = max(0.0, min(1.0, probability))
+            logit_tensor = outputs["logit"]
+            fusion_weights = outputs.get("fusion_weights")
+            calibrated_logit = logit_tensor / self.temperature
+            probability = float(torch.sigmoid(calibrated_logit).item())
+            probability = max(0.0, min(1.0, probability))
 
-        used_threshold, used_profile = self._resolve_threshold(threshold=threshold, threshold_profile=threshold_profile)
+            used_threshold, used_profile = self._resolve_threshold(threshold=threshold, threshold_profile=threshold_profile)
 
-        prediction = "AIGC" if probability >= used_threshold else "REAL"
-        confidence = probability if prediction == "AIGC" else 1.0 - probability
+            prediction = "AIGC" if probability >= used_threshold else "REAL"
+            confidence = probability if prediction == "AIGC" else 1.0 - probability
 
-        branch_contribution = {"rgb": None, "noise": None, "frequency": None}
-        fusion_weights_list = None
-        if fusion_weights is not None and torch.is_tensor(fusion_weights):
-            weights = fusion_weights[0] if fusion_weights.dim() == 2 else fusion_weights
-            if weights.numel() >= 3:
-                fusion_weights_list = [float(weights[index].item()) for index in range(3)]
-                branch_contribution = {
-                    "rgb": fusion_weights_list[0],
-                    "frequency": fusion_weights_list[1],
-                    "noise": fusion_weights_list[2],
-                }
+            branch_contribution = {"rgb": None, "noise": None, "frequency": None}
+            fusion_weights_list = None
+            if fusion_weights is not None and torch.is_tensor(fusion_weights):
+                weights = fusion_weights[0] if fusion_weights.dim() == 2 else fusion_weights
+                if weights.numel() >= 3:
+                    fusion_weights_list = [float(weights[index].item()) for index in range(3)]
+                    branch_contribution = {
+                        "rgb": fusion_weights_list[0],
+                        "frequency": fusion_weights_list[1],
+                        "noise": fusion_weights_list[2],
+                    }
 
-        semantic_logit = outputs.get("semantic_logit")
-        frequency_logit = outputs.get("freq_logit")
-        noise_logit = outputs.get("noise_logit")
-        base_logit = outputs.get("base_logit")
-        noise_delta_logit = outputs.get("noise_delta_logit")
-        alpha_used = outputs.get("alpha_used")
-        if alpha_used is None:
-            alpha_used = outputs.get("alpha")
-        active_mode = str(outputs.get("active_inference_mode") or self.inference_mode)
+            semantic_logit = outputs.get("semantic_logit")
+            frequency_logit = outputs.get("freq_logit")
+            noise_logit = outputs.get("noise_logit")
+            base_logit = outputs.get("base_logit")
+            noise_delta_logit = outputs.get("noise_delta_logit")
+            alpha_used = outputs.get("alpha_used")
+            if alpha_used is None:
+                alpha_used = outputs.get("alpha")
+            active_mode = str(outputs.get("active_inference_mode") or self.inference_mode)
 
-        probabilities = {
-            "real": float(1.0 - probability),
-            "aigc": float(probability),
-        }
-
-        semantic_prob = self._prob_from_logit(semantic_logit)
-        frequency_prob = self._prob_from_logit(frequency_logit)
-        noise_prob = self._prob_from_logit(noise_logit)
-        branch_evidence, branch_triangle, branch_support = self._compute_branch_evidence(
-            prediction=prediction,
-            branch_usage=branch_contribution,
-            semantic_prob=semantic_prob,
-            frequency_prob=frequency_prob,
-            noise_prob=noise_prob,
-        )
-
-        semantic_weight = branch_triangle.get("rgb", 0.0)
-        frequency_weight = branch_triangle.get("frequency", 0.0)
-        noise_weight = branch_triangle.get("noise", 0.0)
-        fusion_evidence_b64 = self.generate_fusion_evidence_plot(
-            semantic=semantic_weight,
-            freq=frequency_weight,
-            noise=noise_weight,
-            prediction=prediction,
-        )
-
-        if temp_path:
-            heatmap, overlay, gradcam_debug = self.generate_grad_cam(temp_path, debug=debug)
-        else:
-            heatmap, overlay, gradcam_debug = None, None, {
-                "grad_cam_status": "skipped",
-                "error": "Grad-CAM requires file path, PIL.Image input not supported for Grad-CAM",
+            probabilities = {
+                "real": float(1.0 - probability),
+                "aigc": float(probability),
             }
 
-        grad_cam_b64 = self._to_base64(heatmap)
-        grad_cam_overlay_b64 = self._to_base64(overlay)
-        gradcam_debug["base64_length"] = len(grad_cam_b64) if grad_cam_b64 is not None else 0
-        gradcam_debug["overlay_base64_length"] = len(grad_cam_overlay_b64) if grad_cam_overlay_b64 is not None else 0
-        gradcam_debug["device"] = str(self.device)
-        gradcam_debug["model_family"] = self.model_family
-        gradcam_debug["mode"] = active_mode
-
-        if self.model_family in {"ntire", "v10"}:
-            gradcam_debug["grad_cam_status"] = "not_supported"
-        else:
-            gradcam_debug["grad_cam_status"] = "success" if grad_cam_b64 else "failed"
-
-        if gradcam_debug.get("grad_cam_status") == "failed" and gradcam_debug.get("error") is None:
-            gradcam_debug["error"] = "Grad-CAM returned empty image"
-
-        if debug or self.enable_debug:
-            self.logger.info(
-                "predict_done prediction=%s confidence=%.6f mode=%s threshold=%.3f grad_cam_status=%s",
-                prediction,
-                confidence,
-                active_mode,
-                used_threshold,
-                gradcam_debug["grad_cam_status"],
+            semantic_prob = self._prob_from_logit(semantic_logit)
+            frequency_prob = self._prob_from_logit(frequency_logit)
+            noise_prob = self._prob_from_logit(noise_logit)
+            branch_evidence, branch_triangle, branch_support = self._compute_branch_evidence(
+                prediction=prediction,
+                branch_usage=branch_contribution,
+                semantic_prob=semantic_prob,
+                frequency_prob=frequency_prob,
+                noise_prob=noise_prob,
             )
 
-        return {
-            "prediction": prediction,
-            "label": prediction,
-            "label_id": 1 if prediction == "AIGC" else 0,
-            "confidence": confidence,
-            "probabilities": probabilities,
-            "branch_contribution": branch_contribution,
-            "branch_usage": branch_contribution,
-            "branch_evidence": branch_evidence,
-            "branch_triangle": branch_triangle,
-            "branch_support": branch_support,
-            "branch_analysis_mode": "support_weighted_usage",
-            "artifacts": {
-                "noise_residual": None,
-                "frequency_spectrum": None,
-                "grad_cam": grad_cam_b64,
-                "grad_cam_overlay": grad_cam_overlay_b64,
-                "fusion_evidence": fusion_evidence_b64,
-            },
-            "probability": probability,
-            "branch_scores": branch_evidence,
-            "debug": gradcam_debug if (debug or self.enable_debug) else None,
-            "fusion_weights": fusion_weights_list,
-            "temperature": self.temperature,
-            "scales": self.scales,
-            "tta_flip": self.tta_flip,
-            "threshold": float(used_threshold),
-            "threshold_used": float(used_threshold),
-            "threshold_profile": used_profile,
-            "mode": active_mode,
-            "raw_logit": self._tensor_item(logit_tensor),
-            "semantic_score": semantic_prob,
-            "frequency_score": frequency_prob,
-            "noise_score": noise_prob,
-            "semantic_logit": self._tensor_item(semantic_logit),
-            "frequency_logit": self._tensor_item(frequency_logit),
-            "noise_logit": self._tensor_item(noise_logit),
-            "base_logit": self._tensor_item(base_logit),
-            "noise_delta_logit": self._tensor_item(noise_delta_logit),
-            "alpha": self._tensor_item(alpha_used),
-        }
+            fusion_evidence_b64 = None
+            grad_cam_b64 = None
+            grad_cam_overlay_b64 = None
+            gradcam_debug = {
+                "grad_cam_status": "not_generated",
+                "error": "ForensicDetector visualization generation is disabled; API artifacts are generated in services.api.main.",
+                "base64_length": 0,
+                "overlay_base64_length": 0,
+                "device": str(self.device),
+                "model_family": self.model_family,
+                "mode": active_mode,
+            }
+
+            if debug or self.enable_debug:
+                self.logger.info(
+                    "predict_done prediction=%s confidence=%.6f mode=%s threshold=%.3f grad_cam_status=%s",
+                    prediction,
+                    confidence,
+                    active_mode,
+                    used_threshold,
+                    gradcam_debug["grad_cam_status"],
+                )
+
+            return {
+                "prediction": prediction,
+                "label": prediction,
+                "label_id": 1 if prediction == "AIGC" else 0,
+                "confidence": confidence,
+                "probabilities": probabilities,
+                "branch_contribution": branch_contribution,
+                "branch_usage": branch_contribution,
+                "branch_evidence": branch_evidence,
+                "branch_triangle": branch_triangle,
+                "branch_support": branch_support,
+                "branch_analysis_mode": "support_weighted_usage",
+                "artifacts": {
+                    "noise_residual": None,
+                    "frequency_spectrum": None,
+                    "grad_cam": grad_cam_b64,
+                    "grad_cam_overlay": grad_cam_overlay_b64,
+                    "fusion_evidence": fusion_evidence_b64,
+                },
+                "probability": probability,
+                "branch_scores": branch_evidence,
+                "debug": gradcam_debug if (debug or self.enable_debug) else None,
+                "fusion_weights": fusion_weights_list,
+                "temperature": self.temperature,
+                "scales": self.scales,
+                "tta_flip": self.tta_flip,
+                "threshold": float(used_threshold),
+                "threshold_used": float(used_threshold),
+                "threshold_profile": used_profile,
+                "analysis_thresholds": dict(self.analysis_thresholds),
+                "mode": active_mode,
+                "raw_logit": self._tensor_item(logit_tensor),
+                "tri_fusion_logit": self._tensor_item(outputs.get("tri_fusion_logit", logit_tensor)),
+                "fused_logit": self._tensor_item(outputs.get("fused_logit", logit_tensor)),
+                "semantic_score": semantic_prob,
+                "frequency_score": frequency_prob,
+                "noise_score": noise_prob,
+                "semantic_logit": self._tensor_item(semantic_logit),
+                "frequency_logit": self._tensor_item(frequency_logit),
+                "noise_logit": self._tensor_item(noise_logit),
+                "base_logit": self._tensor_item(base_logit),
+                "noise_delta_logit": self._tensor_item(noise_delta_logit),
+                "alpha": self._tensor_item(alpha_used),
+            }
+        finally:
+            if requested_mode is not None and previous_mode is not None:
+                self.model.set_inference_mode(previous_mode)
+                self.inference_mode = previous_mode

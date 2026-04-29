@@ -1,68 +1,34 @@
 # Changelog
 
-本文件记录 GitHub 公开仓库的主要版本更新。对外版本号遵循公共发布节奏，当前发布版本为 **V5.1**；它对齐的是本地已经完成的 **V10 最终工程路线**。
+## v1.0.0-final-defense
 
-## v5.1.0
+### Added
 
-发布时间：2026-04-02
+- Added final release documentation for graduation-defense deployment.
+- Added GitHub Release notes in `RELEASE_NOTES.md`.
+- Added Git LFS tracking for `.pth` checkpoint files.
+- Added final `photos_test` regression result CSV.
 
-### 重点更新
+### Changed
 
-- 将公开仓库版本号从 `v5` 整理为 **V5.1**，统一对外说明口径。
-- 更新 `README`、`PROJECT_GUIDE`、`FINAL_UPDATE`、`DEPLOYMENT`、`MODEL_CARD` 与 `release notes`，补齐公开版使用文档。
-- 明确当前默认推理模式为 `base_only`，默认阈值为 `recall-first=0.20`、`balanced=0.35`、`precision-first=0.35`。
-- 从默认分支移除大体积权重 `checkpoints/best.pth`，改为保留权重放置说明。
-- 清理旧版 `v9` 训练/评估脚本与一次性 smoke/cloud 辅助脚本，降低公开仓库噪音。
+- Stabilized the three-branch model release around `deploy_safe_tri_branch`.
+- Kept semantic, frequency, and noise branches all active in forward inference.
+- Kept full `tri_fusion / tri_classifier` code for future retraining.
+- Clarified threshold-based decision logic in frontend and documentation.
+- Updated README with setup, model architecture, deployment mode, and validation details.
 
-### 兼容性说明
+### Fixed
 
-- 历史 release 与历史 tag 保留，不做删除。
-- 本次发布不改动前后端主入口、默认推理接口和 V10 主线脚本。
-- 公开仓库默认不再携带最终权重，请按文档自行放置 `checkpoints/best.pth`。
+- Fixed the old-checkpoint risk where randomly initialized `tri_classifier` could affect inference.
+- Fixed the 41% AIGC probability vs 35% threshold explanation in the UI.
+- Fixed Fusion Evidence Triangle center-point behavior by using real `evidence_weights`.
+- Fixed BranchContribution final decision weights showing `N/A`.
+- Fixed login page API endpoint construction so it follows the active API base URL.
+- Hardened backend triplet normalization for dict/list/string numeric values while preserving `0.0`.
 
-## v5.0.0
+### Cleaned
 
-发布时间：2026-03-21
-
-### 重点更新
-
-- 将仓库整体对齐到当前最终可交付工程状态，覆盖训练、评估、推理、后端、前端和报告产物。
-- 以 **V10 最终路线** 为说明主线，明确 `base_only` 为当前默认部署模式。
-- 合并并重写说明类文档，形成更清晰的 `README + PROJECT_GUIDE + Thesis Docs + architecture + CHANGELOG` 结构。
-- 清理本地缓存、重复模型副本、历史训练输出、临时目录和不适合公开保留的旧云训练文档。
-- 将论文报告、图表、Notebook 和表格整理到 `docs/Thesis/`，便于答辩和项目展示。
-
-### 结果摘要
-
-- `photos_test` 上代表性结果达到 `FP 8 -> 2`
-- `Recall = 1.0`
-- `F1 ≈ 0.9`
-- 重点修复 `noise shortcut` 与 `hard-real` 误判问题
-
-## v3.1
-
-发布时间：2026-03-14
-
-### 重点更新
-
-- 重写并审计 README，提升项目展示质量
-- 新增 `docs/architecture.md`
-- 优化文档结构与说明准确性
-
-## v3.0
-
-发布时间：2026-03-13
-
-### 重点更新
-
-- 数据集主线切换到 NTIRE 鲁棒 AIGC 检测任务
-- 引入多分支架构与更完整的训练 / 评估 / 推理脚本
-- 加强真实场景鲁棒性和可解释性分析
-
-## v2.1.0
-
-### 重点更新
-
-- 新增多语言支持
-- 新增解释报告与可视化能力
-- 完善前端交互与后端推理体验
+- Removed Python cache directories.
+- Removed temporary process outputs in `tmp/`.
+- Removed obsolete mode-comparison JSON output.
+- Removed old unreferenced frontend login/register components.

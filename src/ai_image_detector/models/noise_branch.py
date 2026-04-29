@@ -105,6 +105,3 @@ class NoiseResidualBranch(nn.Module):
         if feat.dim() != 2:
             feat = feat.flatten(1)
         return feat
-
-    def extract_residual(self, x: torch.Tensor) -> torch.Tensor:
-        return self.srm(x)

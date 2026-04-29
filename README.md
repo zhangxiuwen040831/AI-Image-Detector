@@ -1,212 +1,169 @@
+# AI Image Detector / 人工智能生成图像检测工具
 
+## 项目简介
 
-# AI Image Detector
+AI Image Detector 是一个面向 AIGC 图像检测的前后端分离系统，覆盖模型训练、后端推理服务、前端可视化展示、用户登录注册以及管理员用户与日志管理。系统当前用于本科毕业设计/答辩场景，重点展示图像真实性判定、三分支取证证据和阈值判定逻辑。
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)
-![React](https://img.shields.io/badge/React-Frontend-61DAFB?logo=react&logoColor=0b0f19)
-![Release](https://img.shields.io/badge/Release-V5.1-2ea44f)
+## 核心模型结构
 
-> Detect AI-generated images using semantic + frequency features for real-world AI safety and content authenticity.
+当前模型采用三分支结构：
 
----
+- 语义结构分支：分析 RGB 图像中的内容结构、语义布局和场景一致性。
+- 频域分布分支：分析频谱分布、频率异常和生成伪影线索。
+- 噪声残差分支：分析 SRM-like 残差和噪声统计证据。
 
-## 🚀 Overview
+当前部署模式为 `deploy_safe_tri_branch`。三个分支都会真实 forward；在当前旧 checkpoint 下，最终判定使用已训练稳定的 `semantic + frequency` 主路径，即 `stable_sf_logit`。噪声残差分支当前作为辅助证据展示，不参与最终判定，因此 `decision_weights.noise = 0.0`。完整三分支门控判定能力已经保留，重新训练或迁移包含 `tri_fusion.*` 和 `tri_classifier.*` 权重的 checkpoint 后可启用。
 
-**AI Image Detector** is an open-source tool designed to identify AI-generated images in real-world scenarios.
+## 当前推理逻辑
 
-It provides a **complete end-to-end pipeline**, including:
+```text
+输入图像
+  → RGB 预处理
+  → semantic / frequency / noise 三分支特征提取
+  → stable_sf_logit 稳定部署决策
+  → sigmoid 得到 AIGC probability
+  → threshold 阈值判定
+  → AIGC / REAL
+```
 
-- 🧠 Model training & evaluation
-- ⚡ FastAPI inference service
-- 🌐 React-based web interface
-- 📊 Explainable detection outputs
-- 📦 Reproducible research + deployment pipeline
+旧 checkpoint 不会使用随机初始化的 `tri_classifier` 作为最终判定路径。如果 checkpoint 缺少 `tri_fusion.*` 或 `tri_classifier.*` 权重，后端会自动 fallback 到 `deploy_safe_tri_branch`。
 
-This project is built for:
+## 阈值说明
 
-- AI-generated content detection
-- Deepfake / diffusion image analysis
-- Content moderation systems
-- Research and benchmarking
+系统按阈值判定，不按 50% 多数规则判定：
 
----
+- `recall_first = 0.20`
+- `balanced = 0.35`
+- `precision_first = 0.55`
 
-## ✨ Key Features
+判定规则：
 
-- **Hybrid Detection Architecture**  
-  Combines **semantic (CLIP-based)** and **frequency-domain** features for robust detection.
+```text
+if AIGC probability >= threshold:
+    prediction = AIGC
+else:
+    prediction = REAL
+```
 
-- **Production-Ready API**  
-  FastAPI backend with structured outputs (probability, threshold, explanations).
+示例：当 `AIGC probability = 41%` 且当前阈值为 `35%` 时，因为 `41% >= 35%`，系统判定为 `AIGC`。
 
-- **Web UI for Visualization**  
-  React frontend for interactive analysis and debugging.
+## 前端功能
 
-- **Explainability Support**  
-  Includes branch contributions and intermediate signals for inspection.
+- 图片上传与检测
+- 最终检测结果展示
+- AIGC 概率与当前阈值解释
+- 三分支 evidence score 与 decision weight 展示
+- Fusion Evidence Triangle 三角证据分布图
+- 噪声残差图与频谱证据图展示
+- 用户登录 / 注册
+- 管理员用户管理与操作日志查看
 
-- **Full Pipeline Support**  
-  Covers training → evaluation → inference → deployment.
+## 后端功能
 
----
+- FastAPI 检测接口 `/detect`
+- 模型推理封装 `DetectorInterface`
+- 阈值配置与推理结果统一返回
+- 可解释性结果返回：噪声残差、频谱图、分支分数、判定权重、证据权重
+- MySQL 用户认证、注册、登录、登出
+- 管理员用户列表、密码重置、按用户查看操作日志
 
-## 🧠 Method (High-Level)
+## 安装环境
 
-The system uses a **dual-branch architecture**:
+建议环境：
 
-- **Semantic Branch** → captures global structure consistency (CLIP ViT)
-- **Frequency Branch** → detects compression / texture anomalies
-- **Fusion Module** → combines both signals into final prediction
+- Python 3.10+
+- Node.js 18+
+- MySQL 8+
+- Git LFS（用于拉取 `checkpoints/best.pth`）
 
-Noise branch is retained as an optional diagnostic component.
-
----
-
-## 📊 Example Results
-
-| Mode | Precision | Recall | F1 |
-|------|---------:|------:|----:|
-| Recall-first | 0.82 | 1.00 | 0.90 |
-| Balanced     | 1.00 | 1.00 | 1.00 |
-
-> Note: Results are based on internal evaluation (`photos_test`). Cross-dataset validation is recommended.
-
----
-
-## 🖼️ Demo
-
-| Main Interface | Analysis Panel |
-| --- | --- |
-| ![UI](docs/assets/main_interface.png) | ![Analysis](docs/assets/analysis_panel.png) |
-
----
-
-## ⚡ Quick Start
-
-### 1. Install dependencies
+## 后端启动
 
 ```bash
 pip install -r requirements.txt
-cd frontend && npm install
-````
+uvicorn services.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
 
-### 2. Prepare model checkpoint
+默认模型路径：
 
 ```text
 checkpoints/best.pth
 ```
 
-### 3. Start backend
+默认数据库配置位于 `services/api/auth.py`，可通过环境变量覆盖：
 
-```bash
-python scripts/start_backend.py
+```text
+DB_HOST
+DB_USER
+DB_PASSWORD
+DB_NAME
+JWT_SECRET
 ```
 
-### 4. Start frontend
+## 前端启动
 
 ```bash
 cd frontend
+npm install
 npm run dev
 ```
 
-Access:
-
-* Frontend → [http://localhost:5173](http://localhost:5173)
-* Backend → [http://localhost:8000](http://localhost:8000)
-
----
-
-## 🔌 API Usage
-
-**POST /detect**
-
-Input:
-
-* image file
-
-Output:
-
-* prediction
-* probability
-* threshold
-* branch contributions
-* debug information
-
----
-
-## 🧪 CLI Inference
-
-```bash
-python scripts/infer_ntire.py \
-  --image photos_test/aigc7.png \
-  --checkpoint checkpoints/best.pth
-```
-
----
-
-## 🏗️ Project Structure
+前端默认开发 API 地址为：
 
 ```text
-AI-Image-Detector/
-├── frontend/          # React UI
-├── services/api/      # FastAPI backend
-├── src/               # Core model logic
-├── scripts/           # Training & inference
-├── configs/           # Experiment configs
-├── docs/              # Documentation & model card
+http://localhost:8000
 ```
 
----
+也可以通过 `VITE_API_URL` 指定后端地址。
 
-## 📌 Use Cases
+## 模型权重说明
 
-* AI-generated image detection
-* Deepfake identification
-* Content authenticity verification
-* AI safety research
+默认部署权重路径为：
 
----
-
-## ⚠️ Limitations
-
-* Model weights are not included
-* Performance may vary across datasets
-* Threshold tuning is required for new domains
-
----
-
-## 📄 Documentation
-
-* Model Card → `docs/MODEL_CARD.md`
-* Deployment → `docs/DEPLOYMENT.md`
-* Project Guide → `docs/PROJECT_GUIDE.md`
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome!
-
-* Bug reports
-* Feature requests
-* Model improvements
-* Evaluation benchmarks
-
----
-
-## 📜 License
-
-MIT License (or your license)
-
----
-
-## 🌱 Maintainer Notes
-
-This project is actively maintained and evolving toward a practical tool for AI-generated image detection in real-world systems.
-
-If you're working on AI safety, detection, or content authenticity, feel free to collaborate.
-
----
-
+```text
+checkpoints/best.pth
 ```
+
+本仓库使用 Git LFS 管理 `.pth` 权重文件。首次克隆后请确认已安装 Git LFS：
+
+```bash
+git lfs install
+git lfs pull
+```
+
+如果未拉取到权重文件，请手动将最终 checkpoint 放置到 `checkpoints/best.pth`。
+
+## 回归测试结果
+
+当前发布版本在 `photos_test` 20 张图片上使用 `deploy_safe_tri_branch` 模式回归测试，按文件名前缀标签统计：
+
+```text
+20 / 20 correct
+accuracy = 1.0
+```
+
+结果文件：
+
+```text
+outputs/photos_test_deploy_safe_tri_branch_results.csv
+```
+
+## 项目目录结构
+
+```text
+src/          模型、训练、推理核心代码
+services/     FastAPI 后端与认证数据库接口
+frontend/     React + Vite 前端
+configs/      训练与推理配置
+scripts/      训练、挖掘、评估脚本
+checkpoints/  部署 checkpoint
+outputs/      最终回归测试结果
+figures/      论文/答辩图表
+```
+
+## 注意事项
+
+- 当前发布版本仍是三分支结构，三个分支都会真实 forward。
+- 当前旧 checkpoint 下最终判定使用 `deploy_safe_tri_branch` 安全部署模式。
+- 噪声残差分支当前作为辅助证据展示，不参与最终判定。
+- 完整三分支同级门控最终判定需要重新训练或迁移包含 `tri_fusion.* / tri_classifier.*` 的 checkpoint 后启用。
+- 不要将 `41%` 这类概率理解为必须超过 50% 才能判定 AIGC；系统使用当前阈值进行判定。

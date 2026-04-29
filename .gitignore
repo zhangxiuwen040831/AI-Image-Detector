@@ -8,8 +8,6 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
-build/
-dist/
 *.egg-info/
 
 # Virtual environments
@@ -18,34 +16,62 @@ venv/
 env/
 ENV/
 
-# Frontend
+# Frontend dependencies and build output
 node_modules/
 frontend/node_modules/
+dist/
 frontend/dist/
+build/
+.vite/
+.cache/
 
-# IDE / local tools
+# Local runtime / secrets
+.env
+.env.*
+!.env.example
+
+# Temporary and debug artifacts
+tmp/
+temp/
+debug/
+scratch/
+archive_cleanup_review/
+tmp_ntire_mock/
+output/
+photos_test_outputs/
+*.log
+*.tmp
+*.bak
+*_debug.*
+debug*.json
+debug*.csv
+debug*.txt
+
+# Generated output policy: keep the final release regression CSV only.
+outputs/*
+!outputs/
+!outputs/photos_test_deploy_safe_tri_branch_results.csv
+outputs/*debug*
+outputs/*tmp*
+outputs/*intermediate*
+
+# Large local data / archives
+data/
+NTIRE-RobustAIGenDetection-train/
+archive/
+*.zip
+
+# OS / editor
+.DS_Store
+Thumbs.db
 .idea/
 .vscode/
 .trae/
 
-# OS
-.DS_Store
-Thumbs.db
+# Local comparison leftovers
+photos_test/_mode_comparison_results.json
 
-# Generated artifacts
-tmp/
-tmp_ntire_mock/
-output/
-outputs/
-photos_test_outputs/
-*.log
-
-# Large local data / archives
-NTIRE-RobustAIGenDetection-train/
-archive/
-
-# Local model artifacts
-*.pth
-*.pt
-model/
+# Model weights are tracked through Git LFS.
+!checkpoints/
 !checkpoints/README.md
+!checkpoints/best.pth

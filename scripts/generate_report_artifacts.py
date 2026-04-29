@@ -21,6 +21,19 @@ from sklearn.metrics import average_precision_score, confusion_matrix, precision
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+DEPLOYMENT_THRESHOLDS = {
+    "recall-first": 0.20,
+    "balanced": 0.35,
+    "precision-first": 0.35,
+}
+ANALYSIS_THRESHOLDS = {
+    "precision-first-analysis": 0.55,
+}
+PHOTOS_TEST_SCOPE = (
+    "photos_test is a small-sample diagnostic set for boundary inspection; "
+    "it is not a large-scale generalization benchmark."
+)
+
 
 def _ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
@@ -102,13 +115,18 @@ def _prepare_photos_predictions(raw_predictions_csv: Path, labels_csv: Path) -> 
     labels_df = labels_df.rename(columns={"label": "ground_truth"})
     raw_df["image_name"] = raw_df["path"].map(lambda value: Path(str(value)).name)
     merged = raw_df.merge(labels_df, on="image_name", how="left")
+    merged["is_labeled_diagnostic_sample"] = merged["ground_truth"].notna()
+    merged = merged[merged["is_labeled_diagnostic_sample"]].copy()
+    merged["ground_truth"] = merged["ground_truth"].astype(int)
     merged["label_name"] = merged["ground_truth"].map({0: "REAL", 1: "AIGC"})
     for threshold_name, threshold in {
-        "pred_recall_first": 0.20,
-        "pred_balanced": 0.35,
-        "pred_precision_first": 0.55,
+        "pred_recall_first": DEPLOYMENT_THRESHOLDS["recall-first"],
+        "pred_balanced": DEPLOYMENT_THRESHOLDS["balanced"],
+        "pred_precision_first": DEPLOYMENT_THRESHOLDS["precision-first"],
+        "pred_precision_first_analysis": ANALYSIS_THRESHOLDS["precision-first-analysis"],
     }.items():
         merged[threshold_name] = np.where(merged["probability"] >= threshold, "AIGC", "REAL")
+    merged["evaluation_scope"] = PHOTOS_TEST_SCOPE
     return merged
 
 
@@ -171,7 +189,9 @@ def _build_version_comparison(
             "precision": float(v8_row[0]["precision"]),
             "recall": float(v8_row[0]["recall"]),
             "f1": float(v8_row[0]["f1"]),
-            "source": "Final checkpoint history epoch 2 (historical baseline, threshold=0.20)",
+            "source": "Internal report artifact from final checkpoint history epoch 2 (threshold=0.20)",
+            "evidence_level": "checkpoint-history-derived",
+            "reproducibility": "partial: no standalone V8 checkpoint is present in the current workspace",
         },
         {
             "version": "V9",
@@ -181,6 +201,8 @@ def _build_version_comparison(
             "recall": float(v9_default["recall"]),
             "f1": float(v9_default["f1"]),
             "source": "docs/reference/v9_reference_report.json (threshold=0.20)",
+            "evidence_level": "reference-json",
+            "reproducibility": "partial: no standalone V9 checkpoint is present in the current workspace",
         },
         {
             "version": "V10",
@@ -190,6 +212,8 @@ def _build_version_comparison(
             "recall": float(v10_default["recall"]),
             "f1": float(v10_default["f1"]),
             "source": "Current checkpoints/best.pth inference on photos_test (threshold=0.20)",
+            "evidence_level": "current-checkpoint-inference",
+            "reproducibility": "yes: reproducible with checkpoints/best.pth and labeled photos_test samples",
         },
     ]
     return pd.DataFrame(rows)
@@ -197,16 +221,24 @@ def _build_version_comparison(
 
 def _build_threshold_profiles(predictions_df: pd.DataFrame) -> pd.DataFrame:
     rows = []
-    for profile, threshold in [
-        ("recall-first", 0.20),
-        ("balanced", 0.35),
-        ("precision-first", 0.55),
+    for profile, threshold, scope, note in [
+        ("recall-first", DEPLOYMENT_THRESHOLDS["recall-first"], "deployment", "runtime API profile"),
+        ("balanced", DEPLOYMENT_THRESHOLDS["balanced"], "deployment", "current default deployment profile"),
+        ("precision-first", DEPLOYMENT_THRESHOLDS["precision-first"], "deployment", "runtime API profile; aligned with balanced in the current UI"),
+        (
+            "precision-first-analysis",
+            ANALYSIS_THRESHOLDS["precision-first-analysis"],
+            "analysis",
+            "photos_test diagnostic sweep only; not a deployment default",
+        ),
     ]:
         metrics = _compute_metrics(predictions_df["ground_truth"], predictions_df["probability"], threshold)
         metrics["profile"] = profile
+        metrics["scope"] = scope
+        metrics["note"] = note
         rows.append(metrics)
     return pd.DataFrame(rows)[
-        ["profile", "threshold", "precision", "recall", "f1", "accuracy", "tp", "fp", "tn", "fn"]
+        ["profile", "scope", "threshold", "precision", "recall", "f1", "accuracy", "tp", "fp", "tn", "fn", "note"]
     ]
 
 
@@ -257,8 +289,13 @@ def _plot_threshold_sweep(sweep_df: pd.DataFrame, output_path: Path) -> None:
     ax2.set_ylabel("FP Count")
     ax2.legend(loc="upper right")
 
-    for threshold in (0.20, 0.35, 0.55):
+    for threshold, label in [
+        (DEPLOYMENT_THRESHOLDS["recall-first"], "deploy recall-first"),
+        (DEPLOYMENT_THRESHOLDS["balanced"], "deploy balanced / precision-first"),
+        (ANALYSIS_THRESHOLDS["precision-first-analysis"], "analysis only"),
+    ]:
         ax1.axvline(threshold, color="#999999", linestyle=":", linewidth=1)
+        ax1.text(threshold, 0.04, label, rotation=90, va="bottom", ha="right", fontsize=8, color="#555555")
 
     fig.tight_layout()
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
@@ -408,6 +445,21 @@ def generate_report_artifacts(project_root: Path | None = None) -> Dict[str, Any
         "final_metrics_balanced": threshold_profiles_df.loc[
             threshold_profiles_df["profile"] == "balanced"
         ].iloc[0].to_dict(),
+        "final_metrics_precision_first_deploy": threshold_profiles_df.loc[
+            threshold_profiles_df["profile"] == "precision-first"
+        ].iloc[0].to_dict(),
+        "final_metrics_precision_first_analysis": threshold_profiles_df.loc[
+            threshold_profiles_df["profile"] == "precision-first-analysis"
+        ].iloc[0].to_dict(),
+        "threshold_definitions": {
+            "deployment": DEPLOYMENT_THRESHOLDS,
+            "analysis_only": ANALYSIS_THRESHOLDS,
+        },
+        "photos_test_scope": PHOTOS_TEST_SCOPE,
+        "version_evidence_note": (
+            "V8/V9/V10 rows are internal version-iteration records. "
+            "Only V10 is fully reproducible from the current checkpoint; V8/V9 rely on retained report artifacts."
+        ),
         "version_comparison": version_df.to_dict(orient="records"),
     }
     summary_path = tmp_dir / "artifact_summary.json"

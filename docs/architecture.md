@@ -9,10 +9,10 @@ graph TB
     Backend -->|Load Config| Configs[Configs]
     Backend -->|Load Model| Checkpoints[Checkpoints]
     Backend -->|Inference Request| Inference[Inference Engine]
-    Inference -->|Forward Pass| Model[AI Model]
-    Inference -->|Generate| GradCAM[GradCAM Explanation]
+    Inference -->|base_only Forward| Model[V10 Semantic + Frequency Path]
+    Inference -->|Auxiliary Evidence| Evidence[Noise Residual + Spectrum]
     Model -->|Prediction| Backend
-    GradCAM -->|Heatmap| Backend
+    Evidence -->|Diagnostic Artifacts| Backend
     Backend -->|Response| Frontend
     Frontend -->|Display| User
 ```
@@ -39,11 +39,11 @@ graph TB
 ```mermaid
 graph TB
     Image[Input Image] -->|Load| Preprocess[Preprocessing]
-    Preprocess -->|Resize/Normalize| Model[AI Model]
-    Model -->|Feature Extraction| Detector[ForensicDetector]
-    Detector -->|Branch Scores| Prediction[Prediction]
-    Detector -->|Optional| GradCAM[GradCAM]
-    GradCAM -->|Heatmap| Explanation[Explanation Report]
+    Preprocess -->|Resize/Normalize| Model[V10 Detector]
+    Model -->|Semantic + Frequency| BaseLogit[Base Logit]
+    Model -->|Noise Branch| AuxEvidence[Auxiliary Noise Evidence]
+    BaseLogit -->|Threshold Profile| Prediction[Prediction]
+    AuxEvidence -->|Residual/Spectrum| Explanation[Explanation Report]
     Prediction -->|Output| Result[Detection Result]
     Explanation -->|Report| Result
 ```
@@ -58,7 +58,7 @@ graph TD
     training -->|Trainer| models[models]
     models -->|MultiBranchDetector| inference[inference]
     inference -->|ForensicDetector| explain[explain]
-    explain -->|GradCAM| inference
+    explain -->|Residual/Spectrum Reports| inference
     inference -->|Detector| evaluation[evaluation]
     training -->|Checkpoint| models
     ntire[ntire] -->|NTIRE Pipeline| models

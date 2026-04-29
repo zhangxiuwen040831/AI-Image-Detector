@@ -1,130 +1,132 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
+  ArrowRight,
+  BarChart3,
   Book,
   Cpu,
+  Eye,
+  Server,
   ShieldCheck,
   SlidersHorizontal,
-  BarChart3,
-  Server,
   Sparkles,
-  ArrowRight,
   Upload,
-  Eye,
 } from 'lucide-react';
 
 const copy = {
   zh: {
-    title: 'AI Image Detector',
+    title: 'AI 图像检测器',
     intro:
-      '本项目是面向 NTIRE 2026 Robust AIGC Detection 任务的最终交付版本。当前正式部署的是 V10 base_only 路线：semantic 与 frequency 负责主判别，noise 分支仅保留为辅助诊断与可解释性展示。',
+      '本项目面向 NTIRE 2026 Robust AIGC Detection 任务，系统围绕语义结构、频域分布与噪声残差三类取证线索构建分析流程。当前部署版本为稳定推理模式：语义结构与频域分布参与最终判定，噪声残差分支作为真实辅助证据展示；完整三分支门控判定需重新训练后启用。',
     versionTitle: '当前交付版本',
     versionItems: [
-      '最终模型：V10 base_only',
+      '当前部署采用三分支特征提取 + 稳定判定路径',
       '默认 checkpoint：checkpoints/best.pth',
       '默认阈值：balanced = 0.35',
-      'recall-first = 0.20，precision-first = 0.35',
+      'recall-first = 0.20，precision-first = 0.55',
     ],
     architectureTitle: '模型主线',
     architectureIntro:
-      '最终模型不再采用旧版“hybrid 默认主导”的部署方式，而是使用 semantic + frequency 主路径完成最终分类。',
+      '当前部署采用三分支特征提取框架：语义结构、频域分布与噪声残差线索都会真实计算，其中语义结构与频域分布负责稳定最终判定，噪声残差用于证据展示。',
     architectureItems: [
-      'Semantic Branch：基于 CLIP ViT，负责高层语义与结构一致性判断。',
-      'Frequency Branch：负责频域分布、压缩痕迹与谱结构线索。',
-      'Primary Fusion：融合 semantic + frequency，得到最终 base logit。',
-      'Noise Branch：保留为辅助诊断，不作为默认最终判定主证据。',
+      'Semantic Branch：基于高层内容语义与结构一致性进行分析。',
+      'Frequency Branch：关注频谱分布、生成伪影与频率异常特征。',
+      'Integrated Decision：当前部署使用已训练的语义结构与频域分布稳定路径形成最终判定 logit。',
+      'Noise Residual Branch：提供残差一致性与噪声统计特征，作为三分支证据体系中的真实辅助证据展示。',
     ],
-    whyTitle: '为什么默认不是 Hybrid',
+    whyTitle: '当前部署思路',
     whyItems: [
-      'V10 Phase 2 之后，base_only 在 hard real 上的误报控制明显优于旧 hybrid 默认路线。',
-      '最终工业候选重点是降低真实图误报，同时保护脆弱 AIGC 样本。',
-      '因此当前部署默认走更稳定的 base_only，而不是把 noise 重新放回主投票路径。',
+      '部署重点在于兼容旧 checkpoint，避免未训练的新三分支分类头直接参与最终判定。',
+      '语义结构、频域分布与噪声残差线索仍然全部 forward，并返回前端用于三分支解释。',
+      '完整三分支门控最终判定保留在代码结构中，待重新训练后启用。',
     ],
     thresholdTitle: '推荐阈值',
     thresholds: [
       'recall-first：0.20，适合更注重召回的场景。',
       'balanced：0.35，当前默认部署阈值。',
-      'precision-first：0.35，当前最终模型下与 balanced 一致。',
+      'precision-first：0.55，适合更严格确认 AIGC 的场景。',
     ],
     explainTitle: '结果页如何解读',
     explainItems: [
       '预测概率：显示最终 AIGC / REAL 概率。',
-      '分支证据分析：当前展示的是样本级证据强度，不再只是旧式 gate 权重。',
-      '三角图：展示语义/频域/噪声证据在当前样本上的分布。',
-      '噪声残差与频谱图：作为辅助诊断视图，不等于最终分类依据本身。',
+      '分支证据分析：展示三类证据分别提供了什么类型的取证信息，以及它们之间的互补关系。',
+      '三角图：展示语义结构、频域分布与噪声残差证据在当前样本上的相对分布，而非单一权重值。',
+      '噪声残差与频谱图：用于解释图像在残差与频域空间中的表现。',
     ],
     systemTitle: '系统结构',
     systemItems: [
-      'React Frontend：负责上传、展示结果与说明。',
-      'FastAPI Backend：负责加载最终模型并提供推理接口。',
-      'ForensicDetector：封装 V10 模型加载、阈值选择和输出结构。',
+      'React 前端：负责上传、展示结果与说明。',
+      'FastAPI 后端：负责加载当前部署模型并提供推理接口。',
+      'ForensicDetector：封装模型加载、后端阈值配置和输出结构；当前前端上传流程不提供独立阈值切换控件。',
     ],
     flowTitle: '检测流程',
     flowSteps: [
       ['1. 上传图像', '选择本地图片或拖拽上传。'],
-      ['2. 模型推理', '走 V10 base_only 主路径完成判定。'],
-      ['3. 查看分析', '展示概率、证据分布和辅助可解释性结果。'],
+      ['2. 模型推理', '系统综合语义结构、频域分布与噪声残差证据形成最终判断。'],
+      ['3. 查看分析', '展示概率结果、分支证据分布与辅助取证解释。'],
     ],
   },
   en: {
     title: 'AI Image Detector',
     intro:
-      'This is the final delivery build for the NTIRE 2026 Robust AIGC Detection task. The deployed model uses the V10 base-only route: semantic and frequency evidence drive the primary decision, while the noise branch is retained only for auxiliary diagnostics and explainability.',
+      'This project is built for the NTIRE 2026 Robust AIGC Detection task. The current deployment uses safe tri-branch inference: semantic, frequency, and noise branches all run, while the trained semantic-frequency path provides the final decision until a trained tri-fusion checkpoint is available.',
     versionTitle: 'Current Delivery',
     versionItems: [
-      'Final model: V10 base_only',
+      'Current deployment follows tri-branch feature extraction with a stable decision path',
       'Default checkpoint: checkpoints/best.pth',
       'Default threshold: balanced = 0.35',
-      'recall-first = 0.20, precision-first = 0.35',
+      'recall-first = 0.20, precision-first = 0.55',
     ],
     architectureTitle: 'Primary Model Path',
     architectureIntro:
-      'The final deployment no longer uses the old hybrid-default route. Instead, the semantic + frequency primary path is responsible for the final classification.',
+      'The deployed interface follows a tri-branch feature extraction framework: all three branches are computed, while semantic and frequency evidence provide the stable final decision and noise residual evidence is shown for interpretation.',
     architectureItems: [
-      'Semantic Branch: CLIP ViT-based high-level semantic and structural reasoning.',
-      'Frequency Branch: frequency distribution, compression traces, and spectral cues.',
-      'Primary Fusion: fuses semantic + frequency into the final base logit.',
-      'Noise Branch: retained for auxiliary diagnostics, not the default final evidence source.',
+      'Semantic Branch: analyzes high-level semantic consistency and structural plausibility.',
+      'Frequency Branch: examines spectral distribution, generative artifacts, and frequency anomalies.',
+      'Integrated Decision: the current deployment uses the trained semantic-frequency stable path for the final decision logit.',
+      'Noise Branch: contributes real residual-consistency and noise-statistical evidence for the three-branch evidence view.',
     ],
-    whyTitle: 'Why Hybrid Is Not The Default',
+    whyTitle: 'Current Deployment Rationale',
     whyItems: [
-      'After V10 Phase 2, base_only controlled hard-real false positives better than the legacy hybrid-default route.',
-      'The final industrial candidate prioritized lower false positives while protecting fragile positive AIGC samples.',
-      'So the deployment default is the more stable base_only route, not a noise-heavy voting path.',
+      'The deployment prioritizes compatibility with the existing checkpoint and avoids using an untrained tri-fusion classifier for final prediction.',
+      'Semantic, frequency, and noise residual branches are all executed and returned for frontend explanation.',
+      'Full tri-branch gated final prediction remains available after retraining with tri-fusion weights.',
     ],
     thresholdTitle: 'Recommended Thresholds',
     thresholds: [
       'recall-first: 0.20 for recall-oriented scenarios.',
       'balanced: 0.35, the current default deployment threshold.',
-      'precision-first: 0.35, currently identical to balanced for the final model.',
+      'precision-first: 0.55 for stricter AIGC confirmation.',
     ],
     explainTitle: 'How To Read The Result Page',
     explainItems: [
       'Prediction Probability: final AIGC / REAL probability output.',
-      'Branch Evidence Analysis: now shows sample-level evidence intensity instead of only legacy gate weights.',
-      'Triangle View: shows the distribution of semantic / frequency / noise evidence for the current sample.',
-      'Noise residual and spectrum views are auxiliary diagnostics rather than the final classification rule by themselves.',
+      'Branch Evidence Analysis: shows what kind of forensic information each branch contributes and how the branches complement one another.',
+      'Triangle View: visualizes the relative distribution of semantic, frequency, and noise evidence for the current sample rather than a single weight value.',
+      'Noise residual and spectrum views are auxiliary forensic displays that help interpret residual and frequency-domain behavior.',
     ],
     systemTitle: 'System Stack',
     systemItems: [
       'React Frontend: upload, result rendering, and project explanation.',
-      'FastAPI Backend: loads the final model and serves inference APIs.',
-      'ForensicDetector: wraps V10 model loading, threshold selection, and response formatting.',
+      'FastAPI Backend: loads the deployed model and serves inference APIs.',
+      'ForensicDetector: wraps model loading, backend threshold configuration, and response formatting; the current upload UI does not expose a separate threshold switch.',
     ],
     flowTitle: 'Detection Flow',
     flowSteps: [
       ['1. Upload Image', 'Select a local image or drag and drop it.'],
-      ['2. Run Inference', 'The V10 base-only primary path produces the decision.'],
-      ['3. Review Analysis', 'Probability, evidence distribution, and auxiliary explainability views are displayed.'],
+      ['2. Run Inference', 'The system forms its main judgment from semantic and frequency evidence while extracting auxiliary residual evidence.'],
+      ['3. Review Analysis', 'Probability, branch evidence distribution, and auxiliary forensic explanations are displayed.'],
     ],
   },
 };
 
 const Section = ({ icon: Icon, title, children }) => (
-  <section className="glass-card p-6 rounded-2xl border border-white/10">
-    <div className="flex items-center gap-2 mb-4">
-      <Icon className="w-5 h-5 text-primary" />
-      <h2 className="text-xl font-bold text-white">{title}</h2>
+  <section className="rounded-[24px] border border-line bg-white p-6 shadow-card">
+    <div className="mb-4 flex items-center gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-panel">
+        <Icon className="h-5 w-5 text-primary" />
+      </div>
+      <h2 className="text-lg font-semibold tracking-tight text-ink">{title}</h2>
     </div>
     {children}
   </section>
@@ -133,9 +135,9 @@ const Section = ({ icon: Icon, title, children }) => (
 const BulletList = ({ items }) => (
   <div className="space-y-3">
     {items.map((item) => (
-      <div key={item} className="flex items-start gap-3 text-gray-300">
-        <span className="mt-1 text-primary">•</span>
-        <p className="leading-relaxed">{item}</p>
+      <div key={item} className="flex items-start gap-3 text-sm leading-7 text-muted">
+        <span className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-400" />
+        <p>{item}</p>
       </div>
     ))}
   </div>
@@ -146,22 +148,44 @@ const Documentation = ({ language = 'zh' }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.8 }}
-      className="max-w-5xl mx-auto px-6 py-12 space-y-6"
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45 }}
+      className="space-y-6"
     >
-      <div className="glass-card p-8 rounded-2xl border border-white/10">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center">
-            <Book className="text-primary w-6 h-6" />
+      <div className="rounded-[28px] border border-line bg-white p-6 shadow-card md:p-8">
+        <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+          <div className="max-w-3xl">
+            <p className="section-title mb-3">{language === 'zh' ? '系统概览' : 'System overview'}</p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-panel">
+                <Book className="h-6 w-6 text-primary" />
+              </div>
+              <h1 className="text-3xl font-semibold tracking-tight text-ink md:text-4xl">{text.title}</h1>
+            </div>
+            <p className="mt-5 text-sm leading-7 text-muted md:text-base">{text.intro}</p>
           </div>
-          <h1 className="text-3xl font-bold text-white">{text.title}</h1>
+          <div className="rounded-[24px] border border-line bg-panel p-5 md:min-w-[280px]">
+            <p className="section-title mb-3">{language === 'zh' ? '部署信息' : 'Deployment'}</p>
+            <div className="space-y-3 text-sm text-muted">
+              <div className="flex items-center justify-between gap-3">
+                <span>{language === 'zh' ? '前端' : 'Frontend'}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink">React + Vite</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>{language === 'zh' ? '后端' : 'Backend'}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink">FastAPI</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>{language === 'zh' ? '模式' : 'Mode'}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink">{language === 'zh' ? '三分支门控融合' : 'Tri-branch gated fusion'}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <p className="text-gray-300 leading-relaxed text-base">{text.intro}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Section icon={ShieldCheck} title={text.versionTitle}>
           <BulletList items={text.versionItems} />
         </Section>
@@ -171,11 +195,11 @@ const Documentation = ({ language = 'zh' }) => {
       </div>
 
       <Section icon={Cpu} title={text.architectureTitle}>
-        <p className="text-gray-300 leading-relaxed mb-4">{text.architectureIntro}</p>
+        <p className="mb-4 text-sm leading-7 text-muted">{text.architectureIntro}</p>
         <BulletList items={text.architectureItems} />
       </Section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Section icon={Sparkles} title={text.whyTitle}>
           <BulletList items={text.whyItems} />
         </Section>
@@ -189,21 +213,21 @@ const Documentation = ({ language = 'zh' }) => {
       </Section>
 
       <Section icon={ArrowRight} title={text.flowTitle}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="glass p-4 rounded-xl border border-primary/20">
-            <Upload className="text-primary w-6 h-6 mb-3" />
-            <h3 className="text-white font-semibold mb-2">{text.flowSteps[0][0]}</h3>
-            <p className="text-sm text-gray-400 leading-relaxed">{text.flowSteps[0][1]}</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-[20px] border border-line bg-panel p-5">
+            <Upload className="mb-4 h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold text-ink">{text.flowSteps[0][0]}</h3>
+            <p className="mt-2 text-sm leading-7 text-muted">{text.flowSteps[0][1]}</p>
           </div>
-          <div className="glass p-4 rounded-xl border border-secondary/20">
-            <Cpu className="text-secondary w-6 h-6 mb-3" />
-            <h3 className="text-white font-semibold mb-2">{text.flowSteps[1][0]}</h3>
-            <p className="text-sm text-gray-400 leading-relaxed">{text.flowSteps[1][1]}</p>
+          <div className="rounded-[20px] border border-line bg-panel p-5">
+            <Cpu className="mb-4 h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold text-ink">{text.flowSteps[1][0]}</h3>
+            <p className="mt-2 text-sm leading-7 text-muted">{text.flowSteps[1][1]}</p>
           </div>
-          <div className="glass p-4 rounded-xl border border-accent/20">
-            <Eye className="text-accent w-6 h-6 mb-3" />
-            <h3 className="text-white font-semibold mb-2">{text.flowSteps[2][0]}</h3>
-            <p className="text-sm text-gray-400 leading-relaxed">{text.flowSteps[2][1]}</p>
+          <div className="rounded-[20px] border border-line bg-panel p-5">
+            <Eye className="mb-4 h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold text-ink">{text.flowSteps[2][0]}</h3>
+            <p className="mt-2 text-sm leading-7 text-muted">{text.flowSteps[2][1]}</p>
           </div>
         </div>
       </Section>

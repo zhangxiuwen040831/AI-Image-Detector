@@ -2,15 +2,19 @@ infer:
   model_path: checkpoints/best.pth
   device: cuda
   image_size: 224
-  mode: base_only
+  mode: deploy_safe_tri_branch
   threshold_profile: balanced
+  # Runtime deployment thresholds used by the API/UI.
   thresholds:
     recall-first: 0.2
     balanced: 0.35
-    precision-first: 0.35
+    precision-first: 0.55
     recall: 0.2
-    precision: 0.35
+    precision: 0.55
     f1: 0.35
+  # Report thresholds used for photos_test diagnostic analysis.
+  analysis_thresholds:
+    photos-test-precision-first: 0.55
   backbone_name: vit_base_patch16_clip_224.openai
   use_aux_heads: true
   fused_dim: 512

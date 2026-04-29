@@ -129,7 +129,7 @@ def mine_base_hard_real_indices(
     base_model = model.module if hasattr(model, "module") else model
     original_mode = getattr(base_model, "inference_mode", "legacy")
     if hasattr(base_model, "set_inference_mode"):
-        base_model.set_inference_mode("base_only")
+        base_model.set_inference_mode("tri_fusion")
 
     ranked: List[Dict[str, object]] = []
     model.eval()
@@ -138,13 +138,15 @@ def mine_base_hard_real_indices(
             for images, _, metadata in loader:
                 images = images.to(device, non_blocking=True)
                 out = model(images)
-                base_logit = out["base_logit"].detach().view(-1)
+                base_logit = out.get("tri_fusion_logit", out["logit"]).detach().view(-1)
                 semantic_logit = out.get("semantic_logit")
                 frequency_logit = out.get("freq_logit")
+                noise_logit = out.get("noise_logit")
                 scores = compute_base_hard_real_score(
                     base_logit=base_logit,
                     semantic_logit=semantic_logit,
                     frequency_logit=frequency_logit,
+                    noise_logit=noise_logit,
                     min_probability=min_probability,
                 ).cpu()
                 base_probability = torch.sigmoid(base_logit).cpu()
@@ -158,12 +160,17 @@ def mine_base_hard_real_indices(
                     if frequency_logit is not None
                     else [None] * len(scores)
                 )
+                noise_list = (
+                    noise_logit.detach().view(-1).cpu().tolist()
+                    if noise_logit is not None
+                    else [None] * len(scores)
+                )
                 dataset_indices = metadata.get("dataset_index")
                 if isinstance(dataset_indices, torch.Tensor):
                     dataset_indices = dataset_indices.cpu().tolist()
                 image_names = list(metadata.get("image_name", []))
                 image_paths = list(metadata.get("image_path", []))
-                for dataset_index, image_name, image_path, score, base_prob, base_logit_i, semantic_i, frequency_i in zip(
+                for dataset_index, image_name, image_path, score, base_prob, base_logit_i, semantic_i, frequency_i, noise_i in zip(
                     dataset_indices,
                     image_names,
                     image_paths,
@@ -172,10 +179,12 @@ def mine_base_hard_real_indices(
                     base_logit.cpu().tolist(),
                     semantic_list,
                     frequency_list,
+                    noise_list,
                 ):
                     disagreement = None
-                    if semantic_i is not None and frequency_i is not None:
-                        disagreement = max(float(frequency_i) - float(semantic_i), 0.0)
+                    branch_values = [float(value) for value in (semantic_i, frequency_i, noise_i) if value is not None]
+                    if len(branch_values) >= 2:
+                        disagreement = max(branch_values) - min(branch_values)
                     ranked.append(
                         {
                             "dataset_index": int(dataset_index),
@@ -186,6 +195,7 @@ def mine_base_hard_real_indices(
                             "base_logit": float(base_logit_i),
                             "semantic_logit": None if semantic_i is None else float(semantic_i),
                             "frequency_logit": None if frequency_i is None else float(frequency_i),
+                            "noise_logit": None if noise_i is None else float(noise_i),
                             "disagreement": disagreement,
                         }
                     )

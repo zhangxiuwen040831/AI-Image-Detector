@@ -1,66 +1,64 @@
-
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Maximize, Activity, ZoomIn } from 'lucide-react';
 import { toRenderableImageSrc } from '../utils/imageSrc';
 
-const FrequencySpectrum = ({ imageBase64, language = 'zh' }) => {
+const FrequencySpectrum = ({ imageBase64, language = 'zh', embedded = false }) => {
   const [zoomed, setZoomed] = useState(false);
   const src = toRenderableImageSrc(imageBase64);
+  const shellClass = embedded
+    ? `flex h-full min-w-0 flex-col rounded-[26px] border border-line bg-panel p-4 lg:p-5 ${imageBase64 ? 'cursor-pointer' : ''}`
+    : `glass-card h-full flex flex-col p-5 ${imageBase64 ? 'cursor-pointer' : ''}`;
+  const imageClass = embedded
+    ? 'relative w-full min-h-[200px] overflow-hidden rounded-[22px] border border-line bg-white lg:min-h-[220px] xl:min-h-[240px]'
+    : 'relative w-full aspect-square overflow-hidden rounded-[22px] border border-line bg-panel md:aspect-[4/3] xl:aspect-[16/10]';
 
-  if (!imageBase64) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.6, delay: 0.6 }}
-        className="glass-card rounded-2xl p-4 h-full flex flex-col justify-center relative overflow-hidden border border-white/10"
-      >
-        <h3 className="h-8 leading-8 text-base font-medium text-white mb-3 text-center tracking-wider border-b border-white/10 pb-2 w-full flex items-center justify-center gap-2">
-            <Activity className="w-6 h-6" style={{ color: 'var(--color-primary, #DA205A)' }} />
-            {language === 'zh' ? '频谱证据' : 'Frequency Spectrum Evidence'}
-          </h3>
-          <div className="w-full aspect-square flex items-center justify-center bg-black/30 rounded-xl border border-white/10 text-sm text-gray-300">
-            {language === 'zh' ? '当前未提供该证据图' : 'No evidence image provided'}
-          </div>
-          <p className="text-xs text-gray-400 text-center mt-3 leading-relaxed">
-            {language === 'zh' ? '频谱图用于辅助观察频域能量分布与潜在异常模式。' : 'Frequency spectrum helps observe frequency domain energy distribution and potential abnormal patterns.'}
-          </p>
-      </motion.div>
-    );
-  }
+  const emptyState = (
+    <div className={`${embedded ? 'min-h-[200px] lg:min-h-[220px] xl:min-h-[240px]' : 'aspect-square md:aspect-[4/3] xl:aspect-[16/10]'} flex w-full items-center justify-center rounded-[22px] border border-line bg-white text-sm text-muted`}>
+      {language === 'zh' ? '当前未提供该证据图' : 'No evidence image provided'}
+    </div>
+  );
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.6, delay: 0.6 }}
-      className="glass-card rounded-2xl p-4 h-full flex flex-col justify-center relative overflow-hidden group cursor-pointer border border-white/10"
-      onClick={() => setZoomed(!zoomed)}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.05 }}
+      className={shellClass}
+      onClick={() => imageBase64 && setZoomed(!zoomed)}
     >
-      <h3 className="h-8 leading-8 text-base font-medium text-white mb-3 text-center tracking-wider border-b border-white/10 pb-2 w-full flex items-center justify-center gap-2">
-        <Activity className="w-6 h-6" style={{ color: 'var(--color-primary, #DA205A)' }} />
-        {language === 'zh' ? '频谱证据' : 'Frequency Spectrum Evidence'}
-      </h3>
-      
-      <div className="w-full aspect-square relative flex items-center justify-center bg-black/40 rounded-xl border border-white/10 overflow-hidden">
-        <img 
-          src={src} 
-          alt="Frequency Spectrum" 
-          className={`w-full h-full object-contain transition-transform duration-500 ${zoomed ? 'scale-150' : 'scale-100 hover:scale-105'}`} 
-          style={{ imageRendering: 'pixelated' }}
-        />
-        
-        <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded-full text-white/80 opacity-0 group-hover:opacity-100 transition-opacity">
-          {zoomed ? <Maximize className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
-        </div>
-        
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-xs text-center text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">
-          {language === 'zh' ? '频谱可视化（点击可放大）' : 'Frequency spectrum visualization (click to zoom)'} 
+      <div className={`mb-4 ${embedded ? '' : 'border-b border-line pb-4'}`}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-soft">
+            <Activity className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="section-title">{language === 'zh' ? '频域证据' : 'Spectral evidence'}</p>
+            <h3 className="text-xl font-semibold tracking-tight text-ink">
+              {language === 'zh' ? '频谱证据' : 'Frequency spectrum evidence'}
+            </h3>
+          </div>
         </div>
       </div>
-      <p className="text-xs text-gray-400 text-center mt-3 leading-relaxed">
-        {language === 'zh' ? '该证据图用于辅助评估图像在频域上的自然性与规则性。' : 'This evidence image helps assess the naturalness and regularity of the image in the frequency domain.'}
+
+      {!imageBase64 ? emptyState : (
+        <div className={imageClass}>
+          <img
+            src={src}
+            alt="Frequency Spectrum"
+            className={`h-full w-full object-contain transition-transform duration-500 ${zoomed ? 'scale-150' : 'scale-100 hover:scale-105'}`}
+            style={{ imageRendering: 'pixelated' }}
+          />
+          <div className="absolute right-3 top-3 rounded-full border border-line bg-white/90 p-2 text-muted shadow-soft">
+            {zoomed ? <Maximize className="h-4 w-4" /> : <ZoomIn className="h-4 w-4" />}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-4 text-sm leading-7 text-muted">
+        {language === 'zh'
+          ? '该证据图用于辅助评估图像在频域上的自然性与规则性。'
+          : 'This evidence image helps assess the naturalness and regularity of the image in the frequency domain.'}
       </p>
     </motion.div>
   );

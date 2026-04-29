@@ -28,6 +28,15 @@ base_bce_weight: 1.0
 semantic_aux_weight: 0.20
 frequency_aux_weight: 0.20
 noise_aux_weight: 0.05
+noise_logit_aux_weight: 0.0
+noise_delta_aux_weight: 0.0
+noise_error_scale: 2.0
+hard_real_noise_bonus: 0.75
+fragile_aigc_noise_bonus: 0.60
+noise_correction_weight: 0.0
+noise_effect_target_scale: 0.25
+alpha_supervision_weight: 0.0
+alpha_target_error_scale: 1.5
 hard_real_margin_weight: 0.10
 hard_real_margin: 0.25
 prototype_margin_weight: 0.05
@@ -37,4 +46,4 @@ fragile_aigc_target_logit: 0.20
 checkpoint_interval: 2
 eval_every: 2
 default_threshold: 0.20
-mode_note: industrial candidate defaults to base_only
+mode_note: industrial candidate defaults to tri_fusion three-branch gated fusion

@@ -37,6 +37,3 @@ class FrequencyBranch(nn.Module):
         if feat.dim() != 2:
             feat = feat.flatten(1)
         return feat
-
-    def extract_frequency_map(self, x: torch.Tensor) -> torch.Tensor:
-        return self.fft_log_magnitude(x)

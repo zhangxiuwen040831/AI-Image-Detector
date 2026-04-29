@@ -1,99 +1,159 @@
-import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import React from 'react';
 import { motion } from 'framer-motion';
+import { normalizeBranchScores, normalizeDecisionWeights } from '../utils/resultUtils';
 
-const labels = {
+const copyMap = {
   zh: {
-    titleEvidence: '分支证据分析',
-    titleUsage: '分支路径使用',
-    semantic: '语义',
-    noise: '噪声',
-    frequency: '频域',
-    evidenceHint: '当前展示的是样本级证据强度，综合了分支自身判断与当前推理路径使用情况。',
-    usageHint: '当前展示的是路径使用比例，更接近 gate/fusion 权重，而不是分支证据强弱。',
-    baseOnlyNote: '在 base_only 模式下，noise 仅作诊断参考，不参与最终决策。',
+    eyebrow: '三分支取证分析',
+    title: '三分支分析概览',
+    overview: '系统通过语义结构、频域分布与噪声残差三类线索进行协同分析。',
+    evidence: '证据线索',
+    decisionWeight: '最终判定权重',
+    noiseDisabled: '辅助证据分支，当前不参与最终判定',
+    auxiliary: '辅助证据',
+    mainDecision: '同级融合分支',
+    semantic: {
+      title: '语义结构分支',
+      role: '内容级特征分析',
+      description: '关注主体结构、语义布局与场景逻辑的一致性，用于判断图像在内容层面是否呈现自然、合理的组织方式。',
+    },
+    frequency: {
+      title: '频域分布分支',
+      role: '频谱/伪迹分析',
+      description: '关注频谱分布、生成伪影与频率异常特征，用于识别图像在频域层面的非自然模式与取证线索。',
+    },
+    noise: {
+      title: '噪声残差分支',
+      role: '残差/噪声证据分析',
+      description: '提供残差一致性与噪声统计特征方面证据，用来增强解释性',
+    },
   },
   en: {
-    titleEvidence: 'Branch Evidence Analysis',
-    titleUsage: 'Branch Path Usage',
-    semantic: 'Semantic',
-    noise: 'Noise',
-    frequency: 'Frequency',
-    evidenceHint: 'This chart shows sample-level evidence intensity by combining branch support with active path usage.',
-    usageHint: 'This chart shows path usage ratios, which are closer to gate/fusion weights than to true branch evidence strength.',
-    baseOnlyNote: 'In base_only mode, noise is diagnostic only and does not participate in the final decision.',
+    eyebrow: 'Three-Branch Forensics',
+    title: 'Three-Branch Analysis Overview',
+    overview: 'The system performs collaborative analysis across semantic, frequency, and noise residual evidence.',
+    evidence: 'Evidence cue',
+    decisionWeight: 'Decision weight',
+    noiseDisabled: 'Auxiliary evidence branch; not used for the current final decision',
+    auxiliary: 'Auxiliary evidence',
+    mainDecision: 'Peer fusion branch',
+    semantic: {
+      title: 'Semantic Branch',
+      role: 'Content-level feature analysis',
+      description: 'Examines object structure, semantic layout, and scene coherence to assess whether the image remains natural and internally consistent at the content level.',
+    },
+    frequency: {
+      title: 'Frequency Branch',
+      role: 'Spectral / forensic abnormality analysis',
+      description: 'Examines spectral distribution, generative artifacts, and frequency-domain anomalies to identify non-natural forensic patterns.',
+    },
+    noise: {
+      title: 'Noise Branch',
+      role: 'Residual / noise evidence analysis',
+      description: 'Provides residual-consistency and noise-statistical evidence to enhance interpretability.',
+    },
   },
 };
 
-const COLORS = ['#DA205A', '#00D1FF', '#7C3AED'];
+function metricWidth(value) {
+  if (typeof value !== 'number') return 0;
+  return Math.max(0, Math.min(value * 100, 100));
+}
 
-const BranchContribution = ({ scores, analysisMode = 'support_weighted_usage', mode = 'base_only', language = 'zh' }) => {
-  const copy = labels[language] || labels.zh;
-  const rgb = typeof scores?.rgb === 'number' ? scores.rgb : 0;
-  const noise = typeof scores?.noise === 'number' ? scores.noise : 0;
-  const frequency = typeof scores?.frequency === 'number' ? scores.frequency : 0;
-  const isEvidenceMode = analysisMode === 'support_weighted_usage';
+function MetricRow({ label, value, tone = 'bg-slate-700' }) {
+  const hasValue = typeof value === 'number' && Number.isFinite(value);
+  const percentText = hasValue ? `${(value * 100).toFixed(1)}%` : 'N/A';
 
-  const data = useMemo(
-    () => [
-      { name: copy.semantic, score: rgb * 100 },
-      { name: copy.noise, score: noise * 100 },
-      { name: copy.frequency, score: frequency * 100 },
-    ],
-    [copy.frequency, copy.noise, copy.semantic, frequency, noise, rgb]
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+        <span className="font-medium text-ink">{label}</span>
+        <span className="font-mono text-muted">{percentText}</span>
+      </div>
+      <div className="h-3 overflow-hidden rounded-full bg-panel">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${metricWidth(value)}%` }} />
+      </div>
+    </div>
   );
+}
+
+function BranchRegion({ branch, copy, evidenceScore, decisionWeight, note, compact = false }) {
+  return (
+    <div className={`flex h-full flex-col gap-5 ${compact ? 'px-0 py-4 xl:px-6' : 'px-0 py-5 xl:px-6 xl:py-4'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="section-title mb-2">{branch.role}</div>
+          <h4 className="text-xl font-semibold tracking-tight text-ink">{branch.title}</h4>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-700">
+          {copy.mainDecision}
+        </span>
+      </div>
+
+      <p className="text-sm leading-7 text-muted">{branch.description}</p>
+      {note && <p className="rounded-[16px] border border-line bg-panel px-4 py-3 text-xs leading-6 text-muted">{note}</p>}
+
+      <div className={`grid gap-4 ${compact ? 'lg:grid-cols-[minmax(0,1fr)_280px]' : 'xl:grid-cols-2'}`}>
+        <MetricRow label={copy.evidence} value={evidenceScore} tone="bg-slate-700" />
+        <MetricRow label={copy.decisionWeight} value={decisionWeight} tone="bg-slate-400" />
+      </div>
+    </div>
+  );
+}
+
+const BranchContribution = ({ result, language = 'zh' }) => {
+  if (!result) return null;
+
+  const copy = copyMap[language] || copyMap.zh;
+  const branchScores = normalizeBranchScores(result);
+  const decisionWeights = normalizeDecisionWeights(result);
+  const noiseDisabled = result?.noise_enabled_for_decision === false;
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.6, delay: 0.4 }}
-      className="glass-card rounded-2xl p-4 border border-white/10 flex flex-col justify-center relative overflow-hidden h-full min-w-0"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.05 }}
+      className="flex h-full min-w-0 flex-col rounded-[32px] border border-line bg-white p-5 shadow-card lg:p-6"
     >
-      <h3 className="h-8 leading-8 text-base font-medium text-white mb-3 text-center tracking-wider border-b border-white/10 pb-2 w-full">
-        {isEvidenceMode ? copy.titleEvidence : copy.titleUsage}
-      </h3>
-
-      <div className="w-full h-48 relative">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={data}
-            layout="vertical"
-            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="rgba(255,255,255,0.05)" />
-            <XAxis type="number" hide />
-            <YAxis
-              dataKey="name"
-              type="category"
-              tick={{ fill: '#aaa', fontSize: 12, fontWeight: 600 }}
-              axisLine={false}
-              tickLine={false}
-              width={50}
-            />
-            <Tooltip
-              cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-              contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px' }}
-              itemStyle={{ color: '#fff', fontSize: '12px' }}
-              formatter={(value) => `${Number(value).toFixed(1)}%`}
-            />
-            <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={20}>
-              {data.map((entry, index) => (
-                <Cell key={`cell-${entry.name}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+      <div className="mb-5 flex flex-col gap-3 border-b border-line pb-5 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <p className="section-title mb-2">{copy.eyebrow}</p>
+          <h3 className="text-2xl font-semibold tracking-tight text-ink">{copy.title}</h3>
+        </div>
+        <p className="text-sm leading-7 text-muted xl:max-w-none">{copy.overview}</p>
       </div>
 
-      <p className="text-xs text-gray-400 text-center mt-3 leading-relaxed">
-        {isEvidenceMode ? copy.evidenceHint : copy.usageHint}
-      </p>
-      {mode === 'base_only' && (
-        <p className="text-[11px] text-cyan-300/80 text-center mt-2 leading-relaxed">
-          {copy.baseOnlyNote}
-        </p>
-      )}
+      <div className="grid gap-0 divide-y divide-line xl:grid-cols-12 xl:divide-y-0">
+        <div className="xl:col-span-6 xl:border-r xl:border-line">
+          <BranchRegion
+            branch={copy.semantic}
+            copy={copy}
+            evidenceScore={branchScores.semantic}
+            decisionWeight={decisionWeights.semantic}
+          />
+        </div>
+
+        <div className="xl:col-span-6">
+          <BranchRegion
+            branch={copy.frequency}
+            copy={copy}
+            evidenceScore={branchScores.frequency}
+            decisionWeight={decisionWeights.frequency}
+          />
+        </div>
+
+        <div className="xl:col-span-12 xl:border-t xl:border-line">
+          <BranchRegion
+            branch={copy.noise}
+            copy={copy}
+            evidenceScore={branchScores.noise}
+            decisionWeight={decisionWeights.noise}
+            note={noiseDisabled ? copy.noiseDisabled : null}
+            compact
+          />
+        </div>
+      </div>
     </motion.div>
   );
 };

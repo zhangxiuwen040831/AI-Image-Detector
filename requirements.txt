@@ -36,6 +36,11 @@ pyyaml>=6.0.0                 # 配置文件
 
 # 安全
 python-jose[cryptography]>=3.3.0  # JWT 认证
+pyjwt>=2.8.0                       # JWT 编码/解码
+
+# 数据库
+pymysql>=1.1.0                   # MySQL 数据库驱动
+bcrypt>=4.0.0                     # 密码哈希
 
 # 模型导出和推理
 onnxruntime>=1.16.0           # ONNX 推理

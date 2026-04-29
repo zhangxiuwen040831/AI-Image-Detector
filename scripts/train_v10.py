@@ -102,9 +102,9 @@ def mine_fragile_aigc_indices(
     )
 
     base_model = model.module if hasattr(model, "module") else model
-    original_mode = getattr(base_model, "inference_mode", "base_only")
+    original_mode = getattr(base_model, "inference_mode", "tri_fusion")
     if hasattr(base_model, "set_inference_mode"):
-        base_model.set_inference_mode("base_only")
+        base_model.set_inference_mode("tri_fusion")
 
     ranked: List[Dict[str, object]] = []
     model.eval()
@@ -113,24 +113,27 @@ def mine_fragile_aigc_indices(
             for images, _, metadata in loader:
                 images = images.to(device, non_blocking=True)
                 out = model(images)
-                base_logit = out["base_logit"].detach().view(-1)
+                base_logit = out.get("tri_fusion_logit", out["logit"]).detach().view(-1)
                 semantic_logit = out.get("semantic_logit")
                 frequency_logit = out.get("freq_logit")
+                noise_logit = out.get("noise_logit")
                 scores = compute_fragile_aigc_score(
                     base_logit=base_logit,
                     semantic_logit=semantic_logit,
                     frequency_logit=frequency_logit,
+                    noise_logit=noise_logit,
                     max_probability=max_probability,
                 ).cpu()
                 base_probability = torch.sigmoid(base_logit).cpu()
                 semantic_list = semantic_logit.detach().view(-1).cpu().tolist() if semantic_logit is not None else [None] * len(scores)
                 frequency_list = frequency_logit.detach().view(-1).cpu().tolist() if frequency_logit is not None else [None] * len(scores)
+                noise_list = noise_logit.detach().view(-1).cpu().tolist() if noise_logit is not None else [None] * len(scores)
                 dataset_indices = metadata.get("dataset_index")
                 if isinstance(dataset_indices, torch.Tensor):
                     dataset_indices = dataset_indices.cpu().tolist()
                 image_names = list(metadata.get("image_name", []))
                 image_paths = list(metadata.get("image_path", []))
-                for dataset_index, image_name, image_path, score, base_prob, base_logit_i, semantic_i, frequency_i in zip(
+                for dataset_index, image_name, image_path, score, base_prob, base_logit_i, semantic_i, frequency_i, noise_i in zip(
                     dataset_indices,
                     image_names,
                     image_paths,
@@ -139,6 +142,7 @@ def mine_fragile_aigc_indices(
                     base_logit.cpu().tolist(),
                     semantic_list,
                     frequency_list,
+                    noise_list,
                 ):
                     ranked.append(
                         {
@@ -150,6 +154,7 @@ def mine_fragile_aigc_indices(
                             "base_logit": float(base_logit_i),
                             "semantic_logit": None if semantic_i is None else float(semantic_i),
                             "frequency_logit": None if frequency_i is None else float(frequency_i),
+                            "noise_logit": None if noise_i is None else float(noise_i),
                         }
                     )
     finally:
@@ -176,7 +181,7 @@ def mine_fragile_aigc_indices(
     return selected_indices, summary
 
 
-def _set_model_mode(model: torch.nn.Module, mode: str = "base_only") -> str:
+def _set_model_mode(model: torch.nn.Module, mode: str = "tri_fusion") -> str:
     base_model = model.module if hasattr(model, "module") else model
     original_mode = getattr(base_model, "inference_mode", mode)
     if hasattr(base_model, "set_inference_mode"):
@@ -208,7 +213,7 @@ def _collect_feature_records_for_indices(
         persistent_workers=True if num_workers > 0 else False,
         drop_last=False,
     )
-    original_mode = _set_model_mode(model, mode="base_only")
+    original_mode = _set_model_mode(model, mode="tri_fusion")
     rows: List[Dict[str, object]] = []
     model.eval()
     try:
@@ -217,10 +222,11 @@ def _collect_feature_records_for_indices(
                 images = images.to(device, non_blocking=True)
                 out = model(images)
                 base_feat = F.normalize(out["base_feat"].detach().float(), dim=1).cpu()
-                base_logit = out["base_logit"].detach().view(-1).cpu()
+                base_logit = out.get("tri_fusion_logit", out["logit"]).detach().view(-1).cpu()
                 base_prob = torch.sigmoid(base_logit)
                 semantic_logit = out["semantic_logit"].detach().view(-1).cpu()
                 frequency_logit = out["freq_logit"].detach().view(-1).cpu()
+                noise_logit = out["noise_logit"].detach().view(-1).cpu()
                 dataset_indices = metadata.get("dataset_index")
                 if isinstance(dataset_indices, torch.Tensor):
                     dataset_indices = dataset_indices.cpu().tolist()
@@ -239,6 +245,7 @@ def _collect_feature_records_for_indices(
                             "base_logit": float(base_logit[idx].item()),
                             "semantic_logit": float(semantic_logit[idx].item()),
                             "frequency_logit": float(frequency_logit[idx].item()),
+                            "noise_logit": float(noise_logit[idx].item()),
                         }
                     )
     finally:
@@ -254,7 +261,7 @@ def _collect_anchor_photo_features(
     image_size: int,
 ) -> List[Dict[str, object]]:
     transform = build_eval_transform(image_size=image_size)
-    original_mode = _set_model_mode(model, mode="base_only")
+    original_mode = _set_model_mode(model, mode="tri_fusion")
     anchors: List[Dict[str, object]] = []
     model.eval()
     try:
@@ -271,10 +278,11 @@ def _collect_anchor_photo_features(
                         "anchor_name": str(anchor_name),
                         "image_path": str(image_path),
                         "base_feat": F.normalize(out["base_feat"].detach().float(), dim=1).cpu()[0].clone(),
-                        "base_probability": float(torch.sigmoid(out["base_logit"].view(-1)).item()),
-                        "base_logit": float(out["base_logit"].view(-1).item()),
+                        "base_probability": float(torch.sigmoid(out.get("tri_fusion_logit", out["logit"]).view(-1)).item()),
+                        "base_logit": float(out.get("tri_fusion_logit", out["logit"]).view(-1).item()),
                         "semantic_logit": float(out["semantic_logit"].view(-1).item()),
                         "frequency_logit": float(out["freq_logit"].view(-1).item()),
+                        "noise_logit": float(out["noise_logit"].view(-1).item()),
                     }
                 )
     finally:
@@ -345,7 +353,12 @@ def mine_anchor_guided_real_indices(
                 continue
             similarity = float(torch.dot(anchor_feat, item["base_feat"]).item())
             similarity = max(similarity, 0.0)
-            disagreement = max(float(item["frequency_logit"]) - float(item["semantic_logit"]), 0.0)
+            branch_logits = [
+                float(item[key])
+                for key in ("semantic_logit", "frequency_logit", "noise_logit")
+                if item.get(key) is not None
+            ]
+            disagreement = max(branch_logits) - min(branch_logits) if len(branch_logits) >= 2 else 0.0
             score = similarity * (0.5 + base_prob) * (1.0 + disagreement)
             if score <= 0.0:
                 continue
@@ -361,6 +374,7 @@ def mine_anchor_guided_real_indices(
                     "base_logit": float(item["base_logit"]),
                     "semantic_logit": float(item["semantic_logit"]),
                     "frequency_logit": float(item["frequency_logit"]),
+                    "noise_logit": float(item.get("noise_logit", 0.0)),
                     "disagreement": float(disagreement),
                 }
             )
@@ -460,9 +474,12 @@ def mine_anchor_guided_fragile_aigc_indices(
             similarity = float(torch.dot(anchor_feat, item["base_feat"]).item())
             similarity = max(similarity, 0.0)
             uncertainty = 4.0 * base_prob * (1.0 - base_prob)
-            agreement = torch.sigmoid(
-                torch.tensor(0.5 * (float(item["semantic_logit"]) + float(item["frequency_logit"])), dtype=torch.float32)
-            ).item()
+            branch_logits = [
+                float(item[key])
+                for key in ("semantic_logit", "frequency_logit", "noise_logit")
+                if item.get(key) is not None
+            ]
+            agreement = torch.sigmoid(torch.tensor(float(np.mean(branch_logits)), dtype=torch.float32)).item()
             score = similarity * uncertainty * (0.5 + float(agreement))
             if score <= 0.0:
                 continue
@@ -478,6 +495,7 @@ def mine_anchor_guided_fragile_aigc_indices(
                     "base_logit": float(item["base_logit"]),
                     "semantic_logit": float(item["semantic_logit"]),
                     "frequency_logit": float(item["frequency_logit"]),
+                    "noise_logit": float(item.get("noise_logit", 0.0)),
                 }
             )
         ranked.sort(key=lambda row: float(row["score"]), reverse=True)
@@ -613,34 +631,21 @@ def evaluate_epoch_outputs(
     evaluate_hybrid: bool,
 ) -> Dict[str, object]:
     eval_dir = output_root / f"eval_epoch_{epoch:03d}"
-    base_eval = evaluate_candidate(
+    tri_eval = evaluate_candidate(
         model=trainer.model,
         device=trainer.device,
-        mode="base_only",
+        mode="tri_fusion",
         val_loader=val_loader,
         photos_dir=photos_dir,
         photos_labels=photos_labels,
-        output_dir=eval_dir / "candidate_base_only",
+        output_dir=eval_dir / "candidate_tri_fusion",
         image_size=image_size,
         default_threshold=default_threshold,
     )
     summary: Dict[str, object] = {
         "epoch": int(epoch),
-        "candidate_base_only": base_eval["report"],
+        "candidate_tri_fusion": tri_eval["report"],
     }
-    if evaluate_hybrid:
-        hybrid_eval = evaluate_candidate(
-            model=trainer.model,
-            device=trainer.device,
-            mode="hybrid_optional",
-            val_loader=val_loader,
-            photos_dir=photos_dir,
-            photos_labels=photos_labels,
-            output_dir=eval_dir / "candidate_hybrid",
-            image_size=image_size,
-            default_threshold=default_threshold,
-        )
-        summary["candidate_hybrid"] = hybrid_eval["report"]
     (eval_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary
 
@@ -653,7 +658,7 @@ def _get_fixed_threshold_metrics(report: Dict[str, object], threshold: float) ->
 def build_final_polish_best_selector() -> Any:
     def _selector(epoch_record: Dict[str, object]) -> Dict[str, object]:
         evaluation = epoch_record.get("evaluation") or {}
-        candidate = evaluation.get("candidate_base_only") or {}
+        candidate = evaluation.get("candidate_tri_fusion") or {}
         photos_020 = (candidate.get("photos_fixed_thresholds") or {}).get("0.20", candidate.get("photos_default", {}))
         photos_030 = (candidate.get("photos_fixed_thresholds") or {}).get("0.30", {})
         val_default = candidate.get("val_default", {})
@@ -707,7 +712,7 @@ def build_final_polish_early_stop(patience: int = 2) -> Any:
     ) -> Optional[Dict[str, object]]:
         del is_best, best_selection
         evaluation = epoch_record.get("evaluation") or {}
-        candidate = evaluation.get("candidate_base_only") or {}
+        candidate = evaluation.get("candidate_tri_fusion") or {}
         photos_020 = (candidate.get("photos_fixed_thresholds") or {}).get("0.20", candidate.get("photos_default", {}))
         photos_030 = (candidate.get("photos_fixed_thresholds") or {}).get("0.30", {})
         if int(float(photos_020.get("fn", 1.0))) == 0 and int(float(photos_020.get("fp", 1e9))) <= 1:
@@ -747,7 +752,7 @@ def build_threshold_recommendation(
             ((val_thresholds.get("precision_ge_0_80") or {}).get("threshold", 0.55))
         ),
         "winner_checkpoint": str(best_checkpoint),
-        "winner_mode": "base_only",
+        "winner_mode": "tri_fusion",
     }
 
 
@@ -761,7 +766,7 @@ def finalize_final_polish_artifacts(
     if not summary_path.exists():
         return {}
     best_eval_summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    candidate_base = dict(best_eval_summary.get("candidate_base_only", {}))
+    candidate_base = dict(best_eval_summary.get("candidate_tri_fusion", {}))
     export_files = [
         "photos_predictions.csv",
         "photos_threshold_sweep.csv",
@@ -769,7 +774,7 @@ def finalize_final_polish_artifacts(
         "val_threshold_sweep.csv",
         "report.json",
     ]
-    candidate_dir = best_eval_dir / "candidate_base_only"
+    candidate_dir = best_eval_dir / "candidate_tri_fusion"
     copied_files: List[str] = []
     for name in export_files:
         src = candidate_dir / name
@@ -779,14 +784,14 @@ def finalize_final_polish_artifacts(
     root_summary = {
         "best_epoch": int(best_epoch),
         "best_checkpoint": str(best_checkpoint),
-        "candidate_base_only": candidate_base,
+        "candidate_tri_fusion": candidate_base,
     }
     (save_dir / "summary.json").write_text(json.dumps(root_summary, indent=2), encoding="utf-8")
     threshold_recommendation = build_threshold_recommendation(candidate_base, best_checkpoint=best_checkpoint)
     candidate_summary = {
         "best_epoch": int(best_epoch),
         "best_checkpoint": str(best_checkpoint),
-        "winner_mode": "base_only",
+        "winner_mode": "tri_fusion",
         "photos_test_default": candidate_base.get("photos_default", {}),
         "photos_test_best_f1": (candidate_base.get("photos_thresholds") or {}).get("best_f1"),
         "heldout_val_default": candidate_base.get("val_default", {}),
@@ -864,6 +869,15 @@ def main() -> int:
     parser.add_argument("--semantic-aux-weight", type=float, default=0.20)
     parser.add_argument("--frequency-aux-weight", type=float, default=0.20)
     parser.add_argument("--noise-aux-weight", type=float, default=0.05)
+    parser.add_argument("--noise-logit-aux-weight", type=float, default=0.15)
+    parser.add_argument("--noise-delta-aux-weight", type=float, default=0.30)
+    parser.add_argument("--noise-error-scale", type=float, default=2.0)
+    parser.add_argument("--hard-real-noise-bonus", type=float, default=0.75)
+    parser.add_argument("--fragile-aigc-noise-bonus", type=float, default=0.60)
+    parser.add_argument("--noise-correction-weight", type=float, default=0.20)
+    parser.add_argument("--noise-effect-target-scale", type=float, default=0.25)
+    parser.add_argument("--alpha-supervision-weight", type=float, default=0.08)
+    parser.add_argument("--alpha-target-error-scale", type=float, default=1.5)
     parser.add_argument("--hard-real-margin-weight", type=float, default=0.10)
     parser.add_argument("--hard-real-margin", type=float, default=0.25)
     parser.add_argument("--anchor-real-margin-weight", type=float, default=0.14)
@@ -935,6 +949,15 @@ def main() -> int:
         semantic_aux_weight=args.semantic_aux_weight,
         frequency_aux_weight=args.frequency_aux_weight,
         noise_aux_weight=args.noise_aux_weight,
+        noise_logit_aux_weight=args.noise_logit_aux_weight,
+        noise_delta_aux_weight=args.noise_delta_aux_weight,
+        noise_error_scale=args.noise_error_scale,
+        hard_real_noise_bonus=args.hard_real_noise_bonus,
+        fragile_aigc_noise_bonus=args.fragile_aigc_noise_bonus,
+        noise_correction_weight=args.noise_correction_weight,
+        noise_effect_target_scale=args.noise_effect_target_scale,
+        alpha_supervision_weight=args.alpha_supervision_weight,
+        alpha_target_error_scale=args.alpha_target_error_scale,
         hard_real_margin_weight=args.hard_real_margin_weight,
         hard_real_margin=args.hard_real_margin,
         anchor_real_margin_weight=args.anchor_real_margin_weight,
@@ -1181,3 +1204,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

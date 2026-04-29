@@ -504,65 +504,29 @@ def main() -> int:
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    candidate_base = evaluate_candidate(
+    candidate_tri = evaluate_candidate(
         model=model,
         device=device,
-        mode="base_only",
+        mode="tri_fusion",
         val_loader=val_loader,
         photos_dir=Path(args.photos_dir),
         photos_labels=Path(args.photos_labels),
-        output_dir=output_dir / "candidate_base_only",
+        output_dir=output_dir / "candidate_tri_fusion",
         image_size=args.image_size,
         default_threshold=args.default_threshold,
     )
 
     candidate_summaries = [
-        _candidate_summary("candidate_base_only", candidate_base),
+        _candidate_summary("candidate_tri_fusion", candidate_tri),
     ]
     final_report: Dict[str, object] = {
         "checkpoint": str(Path(args.checkpoint)),
         "checkpoint_meta": checkpoint_meta,
         "val_mode": val_mode,
-        "candidate_base_only": candidate_summaries[0],
+        "candidate_tri_fusion": candidate_summaries[0],
         "candidate_hybrid": None,
         "candidate_ensemble": None,
     }
-
-    if not args.disable_hybrid:
-        candidate_hybrid = evaluate_candidate(
-            model=model,
-            device=device,
-            mode="hybrid_optional",
-            val_loader=val_loader,
-            photos_dir=Path(args.photos_dir),
-            photos_labels=Path(args.photos_labels),
-            output_dir=output_dir / "candidate_hybrid",
-            image_size=args.image_size,
-            default_threshold=args.default_threshold,
-        )
-        hybrid_summary = _candidate_summary("candidate_hybrid", candidate_hybrid)
-        candidate_summaries.append(hybrid_summary)
-        final_report["candidate_hybrid"] = hybrid_summary
-
-        ensemble_val_records = _ensemble_records(candidate_base["val_records"], candidate_hybrid["val_records"])
-        ensemble_photos_records = _ensemble_records(candidate_base["photos_records"], candidate_hybrid["photos_records"])
-        ensemble_output = output_dir / "candidate_ensemble"
-        ensemble_output.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(ensemble_val_records).to_csv(ensemble_output / "val_predictions.csv", index=False)
-        pd.DataFrame(ensemble_photos_records).to_csv(ensemble_output / "photos_predictions.csv", index=False)
-        ensemble_val_eval = evaluate_records(ensemble_val_records, default_threshold=args.default_threshold)
-        ensemble_photos_eval = evaluate_records(ensemble_photos_records, default_threshold=args.default_threshold)
-        ensemble_val_eval["sweep"].to_csv(ensemble_output / "val_threshold_sweep.csv", index=False)
-        ensemble_photos_eval["sweep"].to_csv(ensemble_output / "photos_threshold_sweep.csv", index=False)
-        ensemble_summary = {
-            "name": "candidate_ensemble",
-            "val_default": ensemble_val_eval["default"],
-            "photos_default": ensemble_photos_eval["default"],
-            "val_thresholds": ensemble_val_eval["thresholds"],
-            "photos_thresholds": ensemble_photos_eval["thresholds"],
-        }
-        final_report["candidate_ensemble"] = ensemble_summary
-        candidate_summaries.append(ensemble_summary)
 
     final_report["winner_industrial"] = choose_industrial_winner(candidate_summaries)
     final_report["winner_competition"] = choose_competition_winner(candidate_summaries)

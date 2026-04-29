@@ -151,14 +151,21 @@ def compute_base_hard_real_score(
     base_logit: torch.Tensor,
     semantic_logit: Optional[torch.Tensor] = None,
     frequency_logit: Optional[torch.Tensor] = None,
+    noise_logit: Optional[torch.Tensor] = None,
     min_probability: float = 0.0,
 ) -> torch.Tensor:
+    # Scores real samples whose final tri-branch prediction is unstable and biased toward AIGC.
     base_logit = base_logit.view(-1)
     score = torch.sigmoid(base_logit)
-    if semantic_logit is not None and frequency_logit is not None:
-        semantic_logit = semantic_logit.view(-1)
-        frequency_logit = frequency_logit.view(-1)
-        score = score * (1.0 + torch.relu(frequency_logit - semantic_logit))
+    branch_logits = [
+        value.view(-1)
+        for value in (semantic_logit, frequency_logit, noise_logit)
+        if value is not None
+    ]
+    if len(branch_logits) >= 2:
+        branch_probs = torch.stack([torch.sigmoid(value) for value in branch_logits], dim=1)
+        disagreement = branch_probs.max(dim=1).values - branch_probs.min(dim=1).values
+        score = score * (1.0 + disagreement)
     if float(min_probability) > 0.0:
         score = score * (torch.sigmoid(base_logit) >= float(min_probability)).float()
     return score
@@ -168,16 +175,20 @@ def compute_fragile_aigc_score(
     base_logit: torch.Tensor,
     semantic_logit: Optional[torch.Tensor] = None,
     frequency_logit: Optional[torch.Tensor] = None,
+    noise_logit: Optional[torch.Tensor] = None,
     max_probability: float = 0.80,
 ) -> torch.Tensor:
     base_logit = base_logit.view(-1)
     base_prob = torch.sigmoid(base_logit)
     uncertainty = 4.0 * base_prob * (1.0 - base_prob)
     score = uncertainty
-    if semantic_logit is not None and frequency_logit is not None:
-        semantic_logit = semantic_logit.view(-1)
-        frequency_logit = frequency_logit.view(-1)
-        agreement = torch.sigmoid(0.5 * (semantic_logit + frequency_logit))
+    branch_logits = [
+        value.view(-1)
+        for value in (semantic_logit, frequency_logit, noise_logit)
+        if value is not None
+    ]
+    if len(branch_logits) >= 2:
+        agreement = torch.stack([torch.sigmoid(value) for value in branch_logits], dim=1).mean(dim=1)
         score = score * (0.5 + agreement)
     if float(max_probability) < 1.0:
         score = score * (base_prob <= float(max_probability)).float()

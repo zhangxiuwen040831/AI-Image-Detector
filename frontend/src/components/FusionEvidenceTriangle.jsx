@@ -6,200 +6,252 @@ import { toRenderableImageSrc } from '../utils/imageSrc';
 const copyMap = {
   zh: {
     titleEvidence: '分支证据三角图',
-    titleUsage: '融合权重三角图',
-    semantic: '语义',
-    noise: '噪声',
-    frequency: '频域',
-    noData: '当前未提供三角图分析数据',
-    hover: '三角图可视化（点击可放大）',
-    evidenceDesc: '顶点分别对应语义、噪声与频域证据。图中点展示当前样本的证据分布，而不是旧式纯 gate 权重。',
-    usageDesc: '顶点分别对应语义、噪声与频域路径使用比例。该视图更接近 gate/fusion 权重。',
-    baseOnlyNote: '在 base_only 模式下，noise 顶点通常接近 0，因为它不参与最终判定。',
+    titleUsage: '三分支证据分布',
+    decisionTitle: '最终判定权重',
+    semantic: '语义结构',
+    noise: '噪声残差',
+    frequency: '频域分布',
+    noData: '未获取到真实分支权重',
+    evidenceDesc: '三角图表示三类证据的相对分布，而非单一权重值。每个顶点对应一种证据来源，图中位置反映当前样本在语义结构、频域分布与噪声残差证据空间中的综合特征。',
+    usageDesc: '该视图用于观察样本在三类证据空间中的整体分布关系，帮助理解不同取证线索之间的互补性与协同性。',
+    architectureNote: '三角图优先使用三分支证据分布权重；该权重用于解释证据分布，不等同于最终判定权重。',
+    weightTitle: '权重分布',
   },
   en: {
     titleEvidence: 'Branch Evidence Triangle',
-    titleUsage: 'Fusion Weight Triangle',
-    semantic: 'Semantic',
-    noise: 'Noise',
-    frequency: 'Frequency',
-    noData: 'No triangle analysis data available',
-    hover: 'Triangle visualization (click to zoom)',
-    evidenceDesc: 'Vertices correspond to semantic, noise, and frequency evidence. The point shows sample-level evidence distribution rather than legacy gate weights.',
-    usageDesc: 'Vertices correspond to semantic, noise, and frequency path usage ratios. This is closer to gate/fusion weights.',
-    baseOnlyNote: 'In base_only mode, the noise vertex is usually near zero because it does not take part in the final decision.',
+    titleUsage: 'Three-Branch Evidence Distribution',
+    decisionTitle: 'Final Decision Weights',
+    semantic: 'Semantic Structure',
+    noise: 'Noise Residual',
+    frequency: 'Frequency Distribution',
+    noData: 'No real branch weights available',
+    evidenceDesc: 'The triangle reflects the relative distribution of three evidence types rather than a single weight value. Each vertex corresponds to one evidence source, and the sample position reflects its combined semantic structure, frequency distribution, and noise residual characteristics.',
+    usageDesc: 'This view helps interpret how the sample is distributed across the three evidence spaces, highlighting complementarity and collaboration among forensic cues.',
+    architectureNote: 'The triangle prioritizes three-branch evidence weights for explanation; these weights are evidence distribution cues, not necessarily final decision weights.',
+    weightTitle: 'Weight distribution',
   },
 };
+
+function finiteNumber(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    return Number.isFinite(Number(value));
+  }
+  return false;
+}
+
+function toFiniteNumber(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function extractWeights(value) {
+  if (!value) return { weights: null, valid: false };
+  const raw = {
+    semantic: value.semantic ?? value.rgb,
+    frequency: value.frequency ?? value.freq,
+    noise: value.noise,
+  };
+  const clean = Object.fromEntries(
+    Object.entries(raw).map(([key, entry]) => {
+      const parsed = toFiniteNumber(entry);
+      return [key, parsed !== null ? Math.max(parsed, 0) : null];
+    }),
+  );
+  const validValues = Object.values(clean).filter(finiteNumber);
+  const total = validValues.reduce((sum, entry) => sum + entry, 0);
+  if (!validValues.length || total <= 1e-8) {
+    return { weights: null, valid: false };
+  }
+  return {
+    valid: true,
+    weights: {
+      semantic: (clean.semantic ?? 0) / total,
+      frequency: (clean.frequency ?? 0) / total,
+      noise: (clean.noise ?? 0) / total,
+    },
+  };
+}
 
 const FusionEvidenceTriangle = ({
   imageBase64,
   branchContribution,
   analysisMode = 'support_weighted_usage',
-  mode = 'base_only',
+  mode = 'tri_fusion',
   language = 'zh',
+  embedded = false,
 }) => {
   const [zoomed, setZoomed] = useState(false);
   const src = toRenderableImageSrc(imageBase64);
   const copy = copyMap[language] || copyMap.zh;
-  const isEvidenceMode = analysisMode === 'support_weighted_usage';
+  const isDecisionMode = analysisMode === 'decision_weights';
+  const isEvidenceMode = !isDecisionMode;
+  const shellClass = embedded
+    ? 'mx-auto flex h-full w-full max-w-[760px] flex-col'
+    : 'glass-card flex h-full cursor-pointer flex-col p-5';
+  const canvasClass = embedded
+    ? 'relative mx-auto aspect-[300/340] w-full max-w-[320px] overflow-hidden rounded-[24px] border border-line bg-panel'
+    : 'relative flex w-full aspect-square items-center justify-center overflow-hidden rounded-[22px] border border-line bg-panel md:aspect-[4/3] xl:aspect-[21/10]';
 
   const normalized = useMemo(() => {
-    const rgb = typeof branchContribution?.rgb === 'number' ? Math.max(branchContribution.rgb, 0) : 0;
-    const noise = typeof branchContribution?.noise === 'number' ? Math.max(branchContribution.noise, 0) : 0;
-    const frequency = typeof branchContribution?.frequency === 'number' ? Math.max(branchContribution.frequency, 0) : 0;
-    const total = rgb + noise + frequency;
-    if (total <= 1e-8) {
-      return { rgb: 1 / 3, noise: 1 / 3, frequency: 1 / 3 };
-    }
+    const { weights, valid } = extractWeights(branchContribution);
     return {
-      rgb: rgb / total,
-      noise: noise / total,
-      frequency: frequency / total,
+      valid,
+      semantic: weights?.semantic ?? null,
+      frequency: weights?.frequency ?? null,
+      noise: weights?.noise ?? null,
     };
   }, [branchContribution]);
 
-  const hasBranchData = branchContribution && (
-    branchContribution.rgb !== null ||
-    branchContribution.noise !== null ||
-    branchContribution.frequency !== null
-  );
+  const hasBranchData = normalized.valid;
 
-  const drawTriangle = (centerX, centroidY, size) => {
-    const height = size * Math.sqrt(3) / 2;
-    const topY = centroidY - height * 2 / 3;
-    const bottomY = centroidY + height / 3;
-    return [
-      `${centerX},${topY}`,
-      `${centerX - size / 2},${bottomY}`,
-      `${centerX + size / 2},${bottomY}`,
-    ].join(' ');
+  const vertices = {
+    semantic: { x: 50, y: 8 },
+    frequency: { x: 12, y: 88 },
+    noise: { x: 88, y: 88 },
   };
 
-  const calculatePointPosition = (rgb, noise, frequency) => {
-    const centerX = 150;
-    const centroidY = 175;
-    const size = 240;
-    const height = size * Math.sqrt(3) / 2;
-
-    const x1 = centerX;
-    const y1 = centroidY - height * 2 / 3;
-    const x2 = centerX - size / 2;
-    const y2 = centroidY + height / 3;
-    const x3 = centerX + size / 2;
-    const y3 = centroidY + height / 3;
-
-    return {
-      x: rgb * x1 + noise * x2 + frequency * x3,
-      y: rgb * y1 + noise * y2 + frequency * y3,
-    };
-  };
+  const calculatePointPosition = () => ({
+    x:
+      normalized.semantic * vertices.semantic.x
+      + normalized.frequency * vertices.frequency.x
+      + normalized.noise * vertices.noise.x,
+    y:
+      normalized.semantic * vertices.semantic.y
+      + normalized.frequency * vertices.frequency.y
+      + normalized.noise * vertices.noise.y,
+  });
 
   const renderSVGTriangle = () => {
-    const centerX = 150;
-    const centroidY = 175;
-    const baseSize = 240;
-    const height = baseSize * Math.sqrt(3) / 2;
-    const topY = centroidY - height * 2 / 3;
-    const bottomY = centroidY + height / 3;
-    const point = calculatePointPosition(normalized.rgb, normalized.noise, normalized.frequency);
+    const point = calculatePointPosition();
 
     return (
       <svg
-        viewBox="0 0 300 340"
-        className={`w-full h-full transition-transform duration-500 ${zoomed ? 'scale-150' : 'scale-100 hover:scale-105'}`}
+        viewBox="0 0 100 100"
+        className={`h-auto w-full transition-transform duration-500 ${zoomed ? 'scale-125' : 'scale-100 hover:scale-105'}`}
       >
-        <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
+        <polygon
+          points={`${vertices.semantic.x},${vertices.semantic.y} ${vertices.frequency.x},${vertices.frequency.y} ${vertices.noise.x},${vertices.noise.y}`}
+          fill="rgba(241, 245, 249, 0.8)"
+          stroke="rgba(51, 65, 85, 0.9)"
+          strokeWidth="1.2"
+        />
+        {[0.25, 0.5, 0.75].map((scale) => {
+          const cx = 50;
+          const cy = 61.3;
+          const pts = Object.values(vertices).map((vertex) => `${cx + (vertex.x - cx) * scale},${cy + (vertex.y - cy) * scale}`).join(' ');
+          return <polygon key={scale} points={pts} fill="none" stroke="rgba(148, 163, 184, 0.45)" strokeWidth="0.8" />;
+        })}
 
-        {[0.25, 0.5, 0.75, 1].map((scale, index) => (
-          <polygon
-            key={`triangle-${scale}`}
-            points={drawTriangle(centerX, centroidY, baseSize * scale)}
-            fill="none"
-            stroke={index === 3 ? 'rgba(218, 32, 90, 0.8)' : 'rgba(255, 255, 255, 0.2)'}
-            strokeWidth={index === 3 ? 2 : 1}
-          />
-        ))}
-
-        <text x={centerX} y={topY - 12} fill="#60A5FA" fontSize="12" textAnchor="middle" fontWeight="600">
+        <text x="50" y="5" fill="#334155" fontSize="4.2" textAnchor="middle" fontWeight="600">
           {copy.semantic}
         </text>
-        <text x={centerX - baseSize / 2 - 15} y={bottomY + 5} fill="#A78BFA" fontSize="12" textAnchor="middle" fontWeight="600">
-          {copy.noise}
-        </text>
-        <text x={centerX + baseSize / 2 + 15} y={bottomY + 5} fill="#34D399" fontSize="12" textAnchor="middle" fontWeight="600">
+        <text x="12" y="96" fill="#64748b" fontSize="4.2" textAnchor="middle" fontWeight="600">
           {copy.frequency}
         </text>
+        <text x="88" y="96" fill="#94a3b8" fontSize="4.2" textAnchor="middle" fontWeight="600">
+          {copy.noise}
+        </text>
 
-        <circle cx={point.x} cy={point.y} r="14" fill="rgba(218, 32, 90, 0.18)" filter="url(#glow)" />
-        <circle cx={point.x} cy={point.y} r="8" fill="#DA205A" filter="url(#glow)" />
-        <circle cx={point.x} cy={point.y} r="3.5" fill="white" />
+        <circle cx={point.x} cy={point.y} r="5.5" fill="rgba(51, 65, 85, 0.12)" />
+        <circle cx={point.x} cy={point.y} r="3.2" fill="#334155" />
+        <circle cx={point.x} cy={point.y} r="1.4" fill="white" />
       </svg>
     );
   };
 
-  if (!imageBase64 && !hasBranchData) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.6, delay: 0.7 }}
-        className="glass-card rounded-2xl p-4 h-full flex flex-col justify-center relative overflow-hidden border border-white/10"
-      >
-        <h3 className="h-8 leading-8 text-base font-medium text-white mb-3 text-center tracking-wider border-b border-white/10 pb-2 w-full flex items-center justify-center gap-2">
-          <GitBranch className="w-6 h-6" style={{ color: 'var(--color-primary, #DA205A)' }} />
-          {isEvidenceMode ? copy.titleEvidence : copy.titleUsage}
-        </h3>
-        <div className="w-full aspect-square flex items-center justify-center bg-black/30 rounded-xl border border-white/10 text-sm text-gray-300">
-          {copy.noData}
-        </div>
-      </motion.div>
-    );
-  }
+  const weightRows = [
+    [copy.semantic, normalized.semantic],
+    [copy.frequency, normalized.frequency],
+    [copy.noise, normalized.noise],
+  ];
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.6, delay: 0.7 }}
-      className="glass-card rounded-2xl p-4 h-full flex flex-col justify-center relative overflow-hidden group cursor-pointer border border-white/10"
-      onClick={() => setZoomed(!zoomed)}
-    >
-      <h3 className="h-8 leading-8 text-base font-medium text-white mb-3 text-center tracking-wider border-b border-white/10 pb-2 w-full flex items-center justify-center gap-2">
-        <GitBranch className="w-6 h-6" style={{ color: 'var(--color-primary, #DA205A)' }} />
-        {isEvidenceMode ? copy.titleEvidence : copy.titleUsage}
-      </h3>
-      <div className="w-full aspect-square relative flex items-center justify-center bg-black/40 rounded-xl border border-white/10 overflow-hidden">
-        {hasBranchData ? (
+  const heading = !embedded && (
+    <div className={`mb-4 ${embedded ? '' : 'border-b border-line pb-4'}`}>
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-soft">
+          <GitBranch className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <p className="section-title">{language === 'zh' ? '融合视图' : 'Fusion view'}</p>
+          <h3 className="text-xl font-semibold tracking-tight text-ink">
+            {isDecisionMode ? copy.decisionTitle : copy.titleUsage}
+          </h3>
+        </div>
+      </div>
+    </div>
+  );
+
+  const body = (
+    <div className={`grid gap-4 ${embedded ? 'xl:grid-cols-[minmax(0,0.56fr)_minmax(280px,0.44fr)] xl:items-center' : ''}`}>
+      <div className="flex flex-col gap-3">
+        <div>
+          <p className="section-title mb-2">{language === 'zh' ? '融合视图' : 'Fusion view'}</p>
+          <h3 className="text-xl font-semibold tracking-tight text-ink">
+            {isDecisionMode ? copy.decisionTitle : copy.titleUsage}
+          </h3>
+        </div>
+
+        <p className="rounded-[18px] border border-line bg-panel px-4 py-3 text-sm leading-7 text-muted">
+          {isEvidenceMode ? copy.evidenceDesc : copy.usageDesc} {copy.architectureNote}
+        </p>
+        {hasBranchData && (
+          <div className="rounded-[18px] border border-line bg-panel px-4 py-3">
+            <div className="section-title mb-2">{copy.weightTitle}</div>
+            <div className="grid gap-2 text-sm text-muted">
+              {weightRows.map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-3">
+                  <span>{label}</span>
+                  <span className="font-mono text-ink">{(value * 100).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className={`${canvasClass} ${embedded ? 'xl:self-center' : ''}`}>
+        {(!imageBase64 && !hasBranchData) ? (
+          <div className="flex h-full w-full items-center justify-center text-sm text-muted">
+            {copy.noData}
+          </div>
+        ) : hasBranchData ? (
           renderSVGTriangle()
         ) : (
           <img
             src={src}
             alt={isEvidenceMode ? copy.titleEvidence : copy.titleUsage}
-            className={`w-full h-full object-contain transition-transform duration-500 ${zoomed ? 'scale-150' : 'scale-100 hover:scale-105'}`}
+            className={`h-full w-full object-contain transition-transform duration-500 ${zoomed ? 'scale-150' : 'scale-100 hover:scale-105'}`}
           />
         )}
-        <div className="absolute top-2 right-2 bg-black/60 p-1.5 rounded-full text-white/80 opacity-0 group-hover:opacity-100 transition-opacity">
-          {zoomed ? <Maximize className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-xs text-center text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">
-          {copy.hover}
-        </div>
+
+        {(imageBase64 || hasBranchData) && (
+          <div className="absolute right-3 top-3 rounded-full border border-line bg-white/90 p-2 text-muted shadow-soft">
+            {zoomed ? <Maximize className="h-4 w-4" /> : <ZoomIn className="h-4 w-4" />}
+          </div>
+        )}
       </div>
-      <p className="text-xs text-gray-400 text-center mt-3 leading-relaxed">
-        {isEvidenceMode ? copy.evidenceDesc : copy.usageDesc}
-      </p>
-      {mode === 'base_only' && (
-        <p className="text-[11px] text-cyan-300/80 text-center mt-2 leading-relaxed">
-          {copy.baseOnlyNote}
-        </p>
-      )}
+    </div>
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.08 }}
+      className={shellClass}
+      onClick={() => (imageBase64 || hasBranchData) && setZoomed(!zoomed)}
+    >
+      {heading}
+      {body}
     </motion.div>
   );
 };
